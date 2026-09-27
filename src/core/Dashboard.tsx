@@ -19,6 +19,10 @@ import {
   Briefcase,
   Layers,
   ArrowRight,
+  Database,
+  Globe,
+  BarChart3,
+  Share2,
 } from 'lucide-react';
 import { Project, ProjectTemplateType } from '../types';
 import { TEMPLATES } from './templates';
@@ -33,6 +37,7 @@ interface DashboardProps {
   onDuplicateProject: (projectId: string) => void;
   onImportZip: (file: File) => void;
   onImportFiles: (files: FileList | File[]) => void;
+  onOpenShare?: (project?: Project) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -43,6 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDuplicateProject,
   onImportZip,
   onImportFiles,
+  onOpenShare,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -97,20 +103,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-extrabold text-xl tracking-tight text-white">
-                  NONONICK <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">UNIVERSAL AI EDITOR</span>
+                  NONONICK <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">AI STUDIO</span>
                 </h1>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-[10px]">
-                  v2.5
-                </span>
+                <a
+                  href="https://nononick.ir/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-[10px] hover:underline"
+                >
+                  nononick.ir
+                </a>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                The Autonomous Web, File, and Visual Design Studio
+                “One workspace. One intelligence layer. Every digital operation connected.”
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <PWAInstallButton />
+
+            {onOpenShare && (
+              <button
+                onClick={() => onOpenShare()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-500/15 to-purple-600/15 hover:from-cyan-500/25 hover:to-purple-600/25 border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-sm transition-all hover:scale-[1.02] cursor-pointer"
+                title="مشاهده و اشتراک‌گذاری لینک عمومی برنامه / Share Public Live App URL"
+              >
+                <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>لینک عمومی (Public URL)</span>
+              </button>
+            )}
+
+            <a
+              href="/api/download-app-source-zip"
+              download="nononick-editor-source.zip"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold transition cursor-pointer"
+              title="دانلود فایل زیپ سورس کامل برنامه / Download full app source code ZIP"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>دانلود سورس ZIP</span>
+            </a>
+
             <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-semibold transition cursor-pointer">
               <Upload className="w-3.5 h-3.5 text-cyan-400" />
               <span>Import ZIP</span>
@@ -132,22 +165,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </header>
 
-        {/* AI Quick Generator Banner */}
+        {/* AI Orchestrator & Productivity Mode Banner */}
         <section className="mt-8 p-6 rounded-2xl glass-panel border border-cyan-500/20 shadow-2xl relative overflow-hidden">
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-300 text-xs font-semibold border border-cyan-500/20 mb-3">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>NONONICK Neural Web Architect</span>
+              <span>Universal Orchestrator Intelligence Layer</span>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">What website or web app do you want to build?</h2>
+            <h2 className="text-2xl font-bold text-white mb-1">What digital product or website do you want to build?</h2>
             <p className="text-slate-400 text-xs mb-4">
-              Describe your idea. The engine will scaffold the files, visual layouts, and responsive components automatically.
+              Don’t make the user operate the tools. Make the system operate the tools for the user.
             </p>
 
-            <form onSubmit={handleCreateWithAi} className="flex gap-2">
+            <form onSubmit={handleCreateWithAi} className="flex gap-2 mb-3">
               <input
                 type="text"
-                placeholder='e.g. "Futuristic AI robotics landing page with dark glassmorphic cards and live pricing"'
+                placeholder='e.g. "Create a website for a modern clinic with cinematic scene and booking table"'
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 className="flex-1 bg-[#090b12] border border-white/15 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-400"
@@ -156,9 +189,42 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 type="submit"
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition whitespace-nowrap cursor-pointer"
               >
-                Generate Project
+                Orchestrate Project
               </button>
             </form>
+
+            {/* Direct Productivity Mode Triggers (Section 29) */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5 text-xs">
+              <span className="text-slate-500 font-mono text-[11px]">Productivity Mode:</span>
+              <button
+                type="button"
+                onClick={() => onCreateProjectFromTemplate('landing', 'High-Converting Business Landing')}
+                className="px-3 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold transition"
+              >
+                ⚡ "Build it"
+              </button>
+              <button
+                type="button"
+                onClick={() => onCreateProjectFromTemplate('landing', 'Code Doctor Repaired Project')}
+                className="px-3 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold transition"
+              >
+                🔧 "Fix it"
+              </button>
+              <button
+                type="button"
+                onClick={() => onCreateProjectFromTemplate('saas', 'Performance Optimized App')}
+                className="px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold transition"
+              >
+                📈 "Improve it"
+              </button>
+              <button
+                type="button"
+                onClick={() => onCreateProjectFromTemplate('landing', 'Production Release Build')}
+                className="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold transition"
+              >
+                🚀 "Ship it"
+              </button>
+            </div>
           </div>
         </section>
 
@@ -217,6 +283,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity"
                       >
+                        {onOpenShare && (
+                          <button
+                            onClick={() => onOpenShare(project)}
+                            className="p-1.5 rounded-lg hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-300 transition"
+                            title="اشتراک‌گذاری لینک عمومی پروژه / Share Public Link"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => onDuplicateProject(project.id)}
                           className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
@@ -247,6 +322,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
                       {project.description || 'Custom web project created in NONONICK.'}
                     </p>
+
+                    {/* Database & SEO Feature Badges */}
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {project.database?.collections && project.database.collections.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[10px] text-cyan-300 font-mono">
+                          <Database className="w-2.5 h-2.5 text-cyan-400" />
+                          {project.database.collections.length} {project.database.collections.length === 1 ? 'collection' : 'collections'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-[10px] text-slate-500 font-mono">
+                          <Database className="w-2.5 h-2.5 text-slate-500" />
+                          DB Ready
+                        </span>
+                      )}
+
+                      {project.seo?.title ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300 font-mono">
+                          <Globe className="w-2.5 h-2.5 text-emerald-400" />
+                          SEO Optimized
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-[10px] text-slate-500 font-mono">
+                          <Globe className="w-2.5 h-2.5 text-slate-500" />
+                          SEO Ready
+                        </span>
+                      )}
+
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-300 font-mono">
+                        <BarChart3 className="w-2.5 h-2.5 text-amber-400" />
+                        Live Vitals
+                      </span>
+                    </div>
                   </div>
 
                   {/* Bottom Stats Footer */}

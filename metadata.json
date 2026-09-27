@@ -1,6 +1,8 @@
 {
-  "name": "NONONICK UNIVERSAL AI EDITOR",
-  "description": "Universal AI-powered web and file editor combining visual design, code editing, live preview, asset management, and smart project orchestration.",
+  "name": "NONONICK Universal AI Editor",
+  "description": "Universal AI-powered web and file editor combining visual design, code editing, live preview, database manager, SEO suite, asset management, and smart project orchestration.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

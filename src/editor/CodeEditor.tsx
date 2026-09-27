@@ -313,7 +313,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             onClick={handleUndo}
             disabled={historyIndex <= 0}
             className="p-1.5 rounded hover:bg-white/10 text-slate-400 disabled:opacity-30 transition"
-            title="Undo"
+            title="قبل / واگرد (Undo - Ctrl+Z)"
+            aria-label="قبل / واگرد"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -321,7 +322,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
             className="p-1.5 rounded hover:bg-white/10 text-slate-400 disabled:opacity-30 transition"
-            title="Redo"
+            title="بعد / بازانجام (Redo - Ctrl+Y)"
+            aria-label="بعد / بازانجام"
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>

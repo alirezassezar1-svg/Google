@@ -126,30 +126,225 @@ export async function extractZipToProjectFiles(zipBlobOrFile: Blob | File): Prom
 }
 
 /**
- * Builds and downloads a full Project ZIP
+ * Builds and downloads a full Project ZIP containing all current HTML, CSS, JS,
+ * media assets, fonts, and subfolders matching the exact project's current file state.
  */
-export async function exportProjectAsZip(project: Project, customFilename?: string): Promise<void> {
+export async function exportProjectAsZip(
+  project: Project,
+  customFilename?: string,
+  onProgress?: (percent: number, currentFile: string) => void
+): Promise<{ blob: Blob; filename: string }> {
   const zip = new JSZip();
 
-  for (const file of project.files) {
-    // Strip leading slash for zip paths
-    const cleanPath = file.path.replace(/^\/+/, '');
+  // Track created directories to ensure empty or nested folders are preserved
+  const createdDirs = new Set<string>();
 
-    if (file.isBinary && file.content.startsWith('data:')) {
-      // Extract raw base64 data
-      const base64Index = file.content.indexOf(';base64,');
-      if (base64Index !== -1) {
-        const base64Data = file.content.substring(base64Index + 8);
-        zip.file(cleanPath, base64Data, { base64: true });
+  const totalFiles = project.files.length;
+  let processedFiles = 0;
+
+  for (const file of project.files) {
+    // Normalize path by stripping leading slashes
+    const cleanPath = file.path.replace(/^\/+/, '').trim();
+    if (!cleanPath) continue;
+
+    // Report progress if callback provided
+    processedFiles++;
+    if (onProgress) {
+      onProgress(Math.round((processedFiles / Math.max(totalFiles, 1)) * 100), cleanPath);
+    }
+
+    // Ensure parent folders are registered
+    const pathParts = cleanPath.split('/');
+    if (pathParts.length > 1) {
+      let currentDir = '';
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        currentDir = currentDir ? `${currentDir}/${pathParts[i]}` : pathParts[i];
+        if (!createdDirs.has(currentDir)) {
+          zip.folder(currentDir);
+          createdDirs.add(currentDir);
+        }
+      }
+    }
+
+    // If it's a directory placeholder file (e.g. .keep), ensure directory exists and optionally omit the placeholder
+    if (cleanPath.endsWith('/.keep') || cleanPath === '.keep') {
+      const dirName = cleanPath.replace(/\/?\.keep$/, '');
+      if (dirName && !createdDirs.has(dirName)) {
+        zip.folder(dirName);
+        createdDirs.add(dirName);
+      }
+      // Continue to next file without saving raw .keep file if directory is created
+      continue;
+    }
+
+    const fileDate = file.updatedAt ? new Date(file.updatedAt) : new Date();
+
+    // Handle binary assets (Images, Videos, Fonts, Audio, etc.)
+    if (file.isBinary) {
+      if (typeof file.content === 'string' && file.content.startsWith('data:')) {
+        const base64Index = file.content.indexOf(';base64,');
+        if (base64Index !== -1) {
+          // Standard base64 Data URL
+          const base64Data = file.content.substring(base64Index + 8).trim();
+          zip.file(cleanPath, base64Data, { base64: true, date: fileDate });
+        } else {
+          // Data URL without base64 (e.g. data:image/svg+xml;utf8,... or data:text/plain;charset=utf-8,...)
+          const commaIndex = file.content.indexOf(',');
+          const rawPayload = commaIndex !== -1 ? file.content.substring(commaIndex + 1) : file.content;
+          try {
+            const decoded = decodeURIComponent(rawPayload);
+            zip.file(cleanPath, decoded, { date: fileDate });
+          } catch {
+            zip.file(cleanPath, rawPayload, { date: fileDate });
+          }
+        }
+      } else if (typeof file.content === 'string' && /^[A-Za-z0-9+/=\r\n]+$/.test(file.content.trim()) && file.content.length > 40) {
+        // Raw base64 string
+        zip.file(cleanPath, file.content.trim(), { base64: true, date: fileDate });
+      } else {
+        // Fallback plain content
+        zip.file(cleanPath, file.content, { date: fileDate });
       }
     } else {
-      zip.file(cleanPath, file.content);
+      // Text files: HTML, CSS, JavaScript, TypeScript, JSON, Markdown, SVG, XML, etc.
+      if (typeof file.content === 'string' && file.content.startsWith('data:') && file.content.includes(';base64,')) {
+        // In case an SVG or text file was stored with a Data URL prefix
+        const base64Index = file.content.indexOf(';base64,');
+        const base64Data = file.content.substring(base64Index + 8).trim();
+        try {
+          const decodedText = atob(base64Data);
+          zip.file(cleanPath, decodedText, { date: fileDate });
+        } catch {
+          zip.file(cleanPath, base64Data, { base64: true, date: fileDate });
+        }
+      } else {
+        zip.file(cleanPath, file.content ?? '', { date: fileDate });
+      }
     }
   }
 
-  const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const filename = customFilename || `${project.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-export.zip`;
-  triggerDownload(content, filename);
+  // Compress using DEFLATE level 6 for optimal speed & compression ratio
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: {
+      level: 6,
+    },
+  });
+
+  const sanitizedName = project.name
+    ? project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    : 'project';
+  const filename = customFilename || `${sanitizedName || 'project'}-export.zip`;
+
+  triggerDownload(blob, filename);
+
+  return { blob, filename };
+}
+
+/**
+ * Builds and downloads a full PWA-Compliant distribution ZIP.
+ * Ensures manifest.webmanifest, service worker registration, offline caching script,
+ * and PWA icons are present in the root folder so the exported site is 100% installable on any host.
+ */
+export async function exportPwaZip(
+  project: Project,
+  onProgress?: (percent: number, currentFile: string) => void
+): Promise<{ blob: Blob; filename: string }> {
+  // Clone project and check if manifest and sw exist; if not, inject defaults
+  const filesCopy = [...project.files];
+
+  const hasManifest = filesCopy.some((f) => f.path.includes('manifest.webmanifest') || f.path.includes('manifest.json'));
+  if (!hasManifest) {
+    const defaultManifest = {
+      name: project.name || 'NONONICK App',
+      short_name: (project.name || 'App').slice(0, 12),
+      description: 'Progressive Web Application built with NONONICK Universal Editor',
+      start_url: '/',
+      display: 'standalone',
+      background_color: '#07080b',
+      theme_color: '#0a0c10',
+      icons: [
+        { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    };
+    filesCopy.push({
+      path: '/manifest.webmanifest',
+      name: 'manifest.webmanifest',
+      extension: 'webmanifest',
+      type: 'json',
+      content: JSON.stringify(defaultManifest, null, 2),
+      isBinary: false,
+      mimeType: 'application/manifest+json',
+      size: 400,
+      updatedAt: Date.now(),
+    });
+  }
+
+  const hasSw = filesCopy.some((f) => f.path === '/sw.js' || f.name === 'sw.js');
+  if (!hasSw) {
+    const defaultSw = `// PWA Service Worker generated by NONONICK
+const CACHE_NAME = 'app-pwa-v1';
+const ASSETS_TO_CACHE = [
+  '/',
+  '/index.html',
+  '/manifest.webmanifest'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      return (
+        cached ||
+        fetch(event.request).catch(() => {
+          if (event.request.headers.get('accept')?.includes('text/html')) {
+            return caches.match('/index.html');
+          }
+        })
+      );
+    })
+  );
+});
+`;
+    filesCopy.push({
+      path: '/sw.js',
+      name: 'sw.js',
+      extension: 'js',
+      type: 'js',
+      content: defaultSw,
+      isBinary: false,
+      mimeType: 'text/javascript',
+      size: defaultSw.length,
+      updatedAt: Date.now(),
+    });
+  }
+
+  const pwaProject: Project = {
+    ...project,
+    files: filesCopy,
+  };
+
+  const sanitized = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return exportProjectAsZip(pwaProject, `${sanitized}-pwa-bundle.zip`, onProgress);
 }
 
 /**

@@ -33,6 +33,7 @@ interface FileManagerProps {
   onDuplicateFile: (path: string) => void;
   onUploadFiles: (files: FileList | File[]) => void;
   onUploadZip: (file: File) => void;
+  onExportZip?: () => void;
 }
 
 interface TreeNode {
@@ -53,6 +54,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
   onDuplicateFile,
   onUploadFiles,
   onUploadZip,
+  onExportZip,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'type' | 'size'>('name');
@@ -64,6 +66,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [copiedFile, setCopiedFile] = useState<ProjectFile | null>(null);
+  const [deletingItem, setDeletingItem] = useState<{ path: string; name: string; isFolder: boolean } | null>(null);
 
   // Build nested tree structure
   const fileTree = useMemo(() => {
@@ -206,6 +209,16 @@ export const FileManager: React.FC<FileManagerProps> = ({
               {renderFileIcon('other', true, !isCollapsed)}
               <span className="truncate flex-1">{node.name}</span>
               <span className="text-[10px] text-slate-500 group-hover:text-slate-400">{childrenKeys.length}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeletingItem({ path: node.path, name: node.name, isFolder: true });
+                }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"
+                title={`حذف پوشه ${node.name}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
             </div>
           )}
 
@@ -256,6 +269,16 @@ export const FileManager: React.FC<FileManagerProps> = ({
         )}
 
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeletingItem({ path: file.path, name: file.name, isFolder: false });
+            }}
+            className="p-1 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"
+            title={`حذف فایل ${file.name} (Delete)`}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -317,13 +340,13 @@ export const FileManager: React.FC<FileManagerProps> = ({
             <div className="h-px bg-white/10 my-1"></div>
             <button
               onClick={() => {
-                onDeleteFile(file.path);
+                setDeletingItem({ path: file.path, name: file.name, isFolder: false });
                 setContextMenuPath(null);
               }}
               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
+              <span>Delete File (حذف)</span>
             </button>
           </div>
         )}
@@ -374,6 +397,29 @@ export const FileManager: React.FC<FileManagerProps> = ({
                 onChange={(e) => e.target.files && onUploadFiles(e.target.files)}
               />
             </label>
+            {activeFilePath && (
+              <button
+                onClick={() => {
+                  const activeFile = files.find((f) => f.path === activeFilePath);
+                  if (activeFile) {
+                    setDeletingItem({ path: activeFile.path, name: activeFile.name, isFolder: false });
+                  }
+                }}
+                className="p-1.5 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"
+                title="حذف فایل انتخابی (Delete active file)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onExportZip && (
+              <button
+                onClick={onExportZip}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-cyan-400 transition"
+                title="Export Full Project ZIP"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -459,6 +505,56 @@ export const FileManager: React.FC<FileManagerProps> = ({
           </span>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-2xl glass-dropdown border border-rose-500/30 p-5 shadow-2xl text-xs space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+              </div>
+              <div>
+                <h4 className="font-bold text-white text-sm">تأیید حذف {deletingItem.isFolder ? 'پوشه' : 'فایل'}</h4>
+                <p className="text-[11px] text-slate-400">Confirm file deletion</p>
+              </div>
+            </div>
+
+            <p className="text-slate-300 leading-relaxed text-[11px]">
+              آیا از حذف <code className="text-rose-300 font-mono font-bold bg-white/5 px-1.5 py-0.5 rounded">{deletingItem.path}</code> اطمینان دارید؟
+              {deletingItem.isFolder && (
+                <span className="block text-amber-300 mt-1">⚠️ تمامی فایل‌های زیرمجموعه این پوشه نیز حذف خواهند شد.</span>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+              <button
+                onClick={() => setDeletingItem(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-300 transition cursor-pointer"
+              >
+                انصراف (Cancel)
+              </button>
+              <button
+                onClick={() => {
+                  if (deletingItem.isFolder) {
+                    const prefix = deletingItem.path.endsWith('/') ? deletingItem.path : `${deletingItem.path}/`;
+                    const filesToDelete = files.filter((f) => f.path === deletingItem.path || f.path.startsWith(prefix));
+                    for (const f of filesToDelete) {
+                      onDeleteFile(f.path);
+                    }
+                  } else {
+                    onDeleteFile(deletingItem.path);
+                  }
+                  setDeletingItem(null);
+                }}
+                className="px-4 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold transition cursor-pointer shadow-md shadow-rose-500/20"
+              >
+                بله، حذف شود (Delete)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

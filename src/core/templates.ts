@@ -1,4 +1,5 @@
 import { Project, ProjectTemplateType } from '../types';
+import { createNonoProject } from './nonoTemplate';
 
 export interface TemplateDefinition {
   id: ProjectTemplateType;
@@ -13,6 +14,15 @@ export interface TemplateDefinition {
 export const TEMPLATES: TemplateDefinition[] = [
   {
     id: 'landing',
+    title: 'NONONICK Digital Studio (nono)',
+    description: 'استودیوی تجربه دیجیتال NONONICK - طراحی دارک نئون، تایپوگرافی اختصاصی فارسی و انگلیسی، کارت‌های سایبری شناور و دکمه‌های کنتراست بالا',
+    icon: 'Sparkles',
+    badge: 'Official',
+    tags: ['NONONICK', 'Digital Studio', 'Dark Cyber', 'Persian', 'Responsive'],
+    createProject: (name = 'nono') => createNonoProject(name),
+  },
+  {
+    id: 'saas',
     title: 'Futuristic SaaS Landing Page',
     description: 'Dark-mode luxury aesthetic with glowing cards, interactive hero, feature showcase, and responsive navbar.',
     icon: 'Sparkles',

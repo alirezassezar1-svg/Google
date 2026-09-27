@@ -14,6 +14,10 @@ import {
   Maximize2,
   Trash2,
   Sliders,
+  Database,
+  Globe,
+  BarChart3,
+  Share2,
 } from 'lucide-react';
 import { ProjectFile } from '../types';
 
@@ -45,10 +49,20 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   }, [isOpen]);
 
   const defaultCommands = [
+    { id: 'toggle-orchestrator', title: 'Launch Universal AI Orchestrator (DAG Pipeline)', icon: Sparkles, group: 'Orchestrator' },
+    { id: 'toggle-qa', title: 'Run 10-Point Quality Gate Audit', icon: Sparkles, group: 'Quality Gate' },
+    { id: 'toggle-delivery', title: 'View Final Delivery Contract & Packaging', icon: Download, group: 'Release' },
+    { id: 'toggle-cinema', title: 'Open Cinema & Creative Studio', icon: Layers, group: 'Creative' },
+    { id: 'toggle-analyze', title: 'Open Website Analyzer (8-Category Audit)', icon: Sliders, group: 'Analysis' },
+    { id: 'toggle-automations', title: 'Open Automation Workflows Engine', icon: Sparkles, group: 'Automation' },
+    { id: 'toggle-share', title: 'اشتراک‌گذاری و لینک عمومی (Share Public URL)', icon: Share2, group: 'Actions' },
+    { id: 'toggle-database', title: 'Open Database Studio & Collections', icon: Database, group: 'Database' },
+    { id: 'toggle-seo', title: 'Open SEO & Meta Studio', icon: Globe, group: 'SEO' },
+    { id: 'toggle-analytics', title: 'Open Analytics, Vitals & Telemetry', icon: BarChart3, group: 'Analytics' },
     { id: 'new-file', title: 'New File', icon: FilePlus, group: 'Actions' },
     { id: 'new-folder', title: 'New Folder', icon: FolderPlus, group: 'Actions' },
-    { id: 'export-zip', title: 'Export Full Project ZIP', icon: Download, group: 'Actions' },
-    { id: 'export-single', title: 'Export Single HTML File', icon: Download, group: 'Actions' },
+    { id: 'export-zip', title: 'Export Full Project ZIP (Clean Production)', icon: Download, group: 'Actions' },
+    { id: 'export-single', title: 'Export Single HTML File Bundle', icon: Download, group: 'Actions' },
     { id: 'toggle-inspect', title: 'Toggle Visual Inspector', icon: Eye, group: 'Views' },
     { id: 'toggle-ai', title: 'Open NONONICK AI Assistant', icon: Sparkles, group: 'Views' },
     { id: 'toggle-assets', title: 'Open Asset & Media Manager', icon: Layers, group: 'Views' },
