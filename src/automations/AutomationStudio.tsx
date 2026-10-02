@@ -18,16 +18,25 @@ import {
   Send,
   Loader2,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Project } from '../types';
 import { AutomationWorkflow, AutomationStep } from '../orchestrator/types';
 
 interface AutomationStudioProps {
   project: Project;
+  isOpen?: boolean;
+  onClose?: () => void;
   onExecuteWorkflow?: (workflow: AutomationWorkflow) => void;
 }
 
-export const AutomationStudio: React.FC<AutomationStudioProps> = ({ project, onExecuteWorkflow }) => {
+export const AutomationStudio: React.FC<AutomationStudioProps> = ({
+  project,
+  isOpen,
+  onClose,
+  onExecuteWorkflow,
+}) => {
+  if (isOpen !== undefined && !isOpen) return null;
   const [workflows, setWorkflows] = useState<AutomationWorkflow[]>([
     {
       id: 'flow_1',
@@ -151,7 +160,7 @@ export const AutomationStudio: React.FC<AutomationStudioProps> = ({ project, onE
     }
   };
 
-  return (
+  const content = (
     <div className="h-full flex flex-col bg-[#07090e] text-slate-100 font-sans overflow-hidden">
       {/* Top Header */}
       <div className="px-6 py-4 border-b border-white/5 bg-[#090c14]/90 flex items-center justify-between">
@@ -166,14 +175,26 @@ export const AutomationStudio: React.FC<AutomationStudioProps> = ({ project, onE
           </p>
         </div>
 
-        <button
-          onClick={handleRunWorkflow}
-          disabled={isRunning}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-cyan-500 hover:from-amber-400 hover:to-cyan-400 text-slate-950 font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
-        >
-          {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-          <span>{isRunning ? 'Running Pipeline...' : 'Test Run Workflow'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunWorkflow}
+            disabled={isRunning}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-cyan-500 hover:from-amber-400 hover:to-cyan-400 text-slate-950 font-bold text-xs shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+            <span>{isRunning ? 'Running Pipeline...' : 'Test Run Workflow'}</span>
+          </button>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition ml-1"
+              title="Close Automation Engine"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -371,4 +392,16 @@ export const AutomationStudio: React.FC<AutomationStudioProps> = ({ project, onE
       </div>
     </div>
   );
+
+  if (isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="w-full max-w-6xl h-[92vh] flex flex-col bg-[#080a11] border border-cyan-500/20 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 };

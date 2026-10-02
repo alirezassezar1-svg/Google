@@ -388,7 +388,7 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
             id: target.id || '',
             className: target.className || '',
             innerText: target.innerText || '',
-            outerHTML: target.outerHTML.slice(0, 1000),
+            outerHTML: target.outerHTML,
             selectorPath: selector,
             styles: styles,
             rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
@@ -429,6 +429,16 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
               }
             }
           }
+        } else if (e.data.type === 'NONONICK_REPLACE_ELEMENT_WITH_COMMENT') {
+          const { selector, commentText } = e.data.payload || {};
+          try {
+            const el = document.querySelector(selector);
+            if (el) {
+              const commentNode = document.createComment(' ' + (commentText || 'Component placeholder') + ' ');
+              el.replaceWith(commentNode);
+              outline.style.display = 'none';
+            }
+          } catch(err) {}
         }
       });
     })();

@@ -18,6 +18,10 @@ import {
   ArrowUp,
   ArrowDown,
   Image as ImageIcon,
+  Box,
+  Code,
+  FileCode,
+  Check,
 } from 'lucide-react';
 import { SelectedElementInfo } from '../types';
 
@@ -30,6 +34,7 @@ interface ElementInspectorProps {
   onDuplicateElement: () => void;
   onMoveElement: (direction: 'up' | 'down') => void;
   onAskAIAboutElement: (instruction: string) => void;
+  onExtractComponent?: () => void;
 }
 
 export const ElementInspector: React.FC<ElementInspectorProps> = ({
@@ -41,8 +46,9 @@ export const ElementInspector: React.FC<ElementInspectorProps> = ({
   onDuplicateElement,
   onMoveElement,
   onAskAIAboutElement,
+  onExtractComponent,
 }) => {
-  const [activeTab, setActiveTab] = useState<'style' | 'content' | 'layout' | 'effects'>('style');
+  const [activeTab, setActiveTab] = useState<'style' | 'layout' | 'content' | 'effects' | 'component'>('style');
   const [responsiveBreakpoint, setResponsiveBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [aiPromptInput, setAiPromptInput] = useState('');
 
@@ -82,6 +88,16 @@ export const ElementInspector: React.FC<ElementInspectorProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
+          {onExtractComponent && (
+            <button
+              onClick={onExtractComponent}
+              className="px-2 py-1 rounded bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 text-[11px] font-semibold transition shadow-sm cursor-pointer"
+              title="Extract to Component (creates partial file and replaces with placeholder comment)"
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Extract Component</span>
+            </button>
+          )}
           <button
             onClick={onDuplicateElement}
             className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white"
@@ -188,6 +204,17 @@ export const ElementInspector: React.FC<ElementInspectorProps> = ({
           }`}
         >
           FX & AI
+        </button>
+        <button
+          onClick={() => setActiveTab('component')}
+          className={`flex-1 py-2 text-center transition border-b-2 ${
+            activeTab === 'component'
+              ? 'border-cyan-400 text-cyan-300 bg-cyan-500/5'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+          title="Component Extraction"
+        >
+          Component
         </button>
       </div>
 
@@ -573,6 +600,58 @@ export const ElementInspector: React.FC<ElementInspectorProps> = ({
                 >
                   Clear Shadow
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: COMPONENT EXTRACTION */}
+        {activeTab === 'component' && (
+          <div className="space-y-4">
+            <div className="p-3 rounded-xl bg-gradient-to-b from-cyan-500/10 via-blue-500/5 to-transparent border border-cyan-500/20 space-y-3">
+              <div className="flex items-center gap-1.5 text-cyan-300 font-semibold">
+                <Box className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs">Extract to Component</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Extract this <span className="font-mono text-cyan-300 font-bold">&lt;{element.tagName.toLowerCase()}&gt;</span> element into a reusable partial file in your project tree. The original element in your HTML will be cleanly replaced with a descriptive comment placeholder.
+              </p>
+
+              {onExtractComponent && (
+                <button
+                  onClick={onExtractComponent}
+                  className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition cursor-pointer"
+                >
+                  <Box className="w-4 h-4" />
+                  <span>Extract to Component</span>
+                </button>
+              )}
+            </div>
+
+            {/* Element Structure Preview */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <Code className="w-3 h-3 text-cyan-400" />
+                HTML Structure
+              </span>
+              <pre className="p-2.5 rounded-lg bg-[#07090e] border border-white/10 font-mono text-[10px] text-slate-300 max-h-36 overflow-y-auto whitespace-pre-wrap break-all custom-scrollbar">
+                {element.outerHTML || `<${element.tagName.toLowerCase()} class="${element.className || ''}">${element.innerText || ''}</${element.tagName.toLowerCase()}>`}
+              </pre>
+            </div>
+
+            {/* Associated CSS Styles Preview */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <FileCode className="w-3 h-3 text-cyan-400" />
+                Computed / Associated CSS
+              </span>
+              <div className="p-2.5 rounded-lg bg-[#07090e] border border-white/10 font-mono text-[10px] text-slate-300 max-h-36 overflow-y-auto space-y-1 custom-scrollbar">
+                {Object.entries(element.styles || {}).filter(([_, v]) => v && v !== 'none' && v !== 'normal').map(([k, v]) => (
+                  <div key={k} className="flex justify-between items-center text-[10px]">
+                    <span className="text-cyan-400">{k}:</span>
+                    <span className="text-slate-300 truncate max-w-[150px]">{v};</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

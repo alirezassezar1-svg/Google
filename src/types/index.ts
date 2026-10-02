@@ -31,6 +31,16 @@ export interface ProjectFile {
   updatedAt: number;
 }
 
+export type ActiveModuleTab =
+  | 'editor'
+  | 'database'
+  | 'seo'
+  | 'analytics'
+  | 'cinema'
+  | 'analyze'
+  | 'automations'
+  | 'orchestrator';
+
 export type ProjectTemplateType =
   | 'blank'
   | 'html-css-js'

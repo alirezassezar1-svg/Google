@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Project,
   ProjectFile,
@@ -12,13 +12,11 @@ import {
   AIProposal,
   AIProposedChange,
   VersionSnapshot,
-  DatabaseCollection,
-  ProjectSeoConfig,
 } from './types';
 import { dbManager } from './storage/db';
 import { TEMPLATES } from './core/templates';
 import { Dashboard } from './core/Dashboard';
-import { EditorHeader, DesktopLayoutMode, ActiveModuleTab } from './ui/EditorHeader';
+import { EditorHeader, DesktopLayoutMode } from './ui/EditorHeader';
 import { FileManager } from './files/FileManager';
 import { CodeEditor } from './editor/CodeEditor';
 import { PreviewEngine } from './preview/PreviewEngine';
@@ -26,33 +24,22 @@ import { ElementInspector } from './visual/ElementInspector';
 import { AssetManager } from './files/AssetManager';
 import { AIAssistant } from './ai/AIAssistant';
 import { AIDiffViewer } from './ai/AIDiffViewer';
-import { AIIntegrationsStudio } from './ai/AIIntegrationsStudio';
 import { VersionHistory } from './core/VersionHistory';
 import { CommandPalette } from './ui/CommandPalette';
 import { MobileNav, EditorMobileTab } from './ui/MobileNav';
 import { DatabaseStudio } from './database/DatabaseStudio';
 import { SeoStudio } from './seo/SeoStudio';
 import { AnalyticsStudio } from './analytics/AnalyticsStudio';
-import { ShareModal } from './ui/ShareModal';
-import { extractZipToProjectFiles, detectFileType, exportProjectAsZip, exportSingleBundledHtml } from './utils/zip';
-import { RotateCcw, RotateCw } from 'lucide-react';
-
-// Orchestrator, Quality Gate, Cinema, Analyzer, Automations
-import { UniversalOrchestrator } from './orchestrator/UniversalOrchestrator';
-import { OrchestratorView } from './orchestrator/OrchestratorView';
-import { QualityGateModal } from './qa/QualityGateModal';
-import { FinalDeliveryModal } from './delivery/FinalDeliveryModal';
+import { AutomationStudio } from './automations/AutomationStudio';
 import { WebsiteAnalyzerStudio, AnalyzerIssue } from './analyzer/WebsiteAnalyzerStudio';
 import { CinemaStudio } from './cinema/CinemaStudio';
-import { AutomationStudio } from './automations/AutomationStudio';
-import { QualityAuditResult, OrchestratorDeliveryContract, AutomationWorkflow } from './orchestrator/types';
-
-interface HistorySnapshot {
-  files: ProjectFile[];
-  activeFilePath: string;
-  label: string;
-  timestamp: number;
-}
+import { OrchestratorView } from './orchestrator/OrchestratorView';
+import { AutomationWorkflow } from './orchestrator/types';
+import { ShareModal } from './ui/ShareModal';
+import { AuthModal } from './auth/AuthModal';
+import { UserProfile, subscribeToAuth, saveProjectToFirestore } from './firebase/config';
+import { DatabaseCollection, ProjectSeoConfig } from './types';
+import { extractZipToProjectFiles, detectFileType, exportProjectAsZip, exportSingleBundledHtml } from './utils/zip';
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -60,16 +47,8 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Global Undo / Redo History Stack (دکمه‌های قبل و بعد)
-  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
-  const [historyToast, setHistoryToast] = useState<{ message: string; type: 'undo' | 'redo' } | null>(null);
-  const isTypingSessionRef = useRef(false);
-  const fileContentDebounceTimerRef = useRef<any>(null);
-
-  // Active Operating System Tab
-  const [activeModuleTab, setActiveModuleTab] = useState<ActiveModuleTab>('editor');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Desktop & Mobile View State
   const [layoutMode, setLayoutMode] = useState<DesktopLayoutMode>('split');
@@ -88,16 +67,21 @@ export default function App() {
   const [showDatabaseStudio, setShowDatabaseStudio] = useState(false);
   const [showSeoStudio, setShowSeoStudio] = useState(false);
   const [showAnalyticsStudio, setShowAnalyticsStudio] = useState(false);
+  const [showAutomationStudio, setShowAutomationStudio] = useState(false);
+  const [showAnalyzerStudio, setShowAnalyzerStudio] = useState(false);
+  const [showCinemaStudio, setShowCinemaStudio] = useState(false);
+  const [showOrchestrator, setShowOrchestrator] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTargetProject, setShareTargetProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<VersionSnapshot[]>([]);
 
-  // Orchestrator, Quality Gate & Final Delivery
-  const [showOrchestrator, setShowOrchestrator] = useState(false);
-  const [showQualityGate, setShowQualityGate] = useState(false);
-  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [activeDeliveryContract, setActiveDeliveryContract] = useState<OrchestratorDeliveryContract | null>(null);
-  const [qaResult, setQaResult] = useState<QualityAuditResult | null>(null);
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Load projects from IndexedDB on startup
   useEffect(() => {
@@ -106,16 +90,15 @@ export default function App() {
         const storedProjects = await dbManager.getAllProjects();
         if (storedProjects.length > 0) {
           setProjects(storedProjects);
+          // Restore last project if available
           const lastActiveId = await dbManager.getSetting<string>('last_active_project_id', '');
           const found = storedProjects.find((p) => p.id === lastActiveId) || storedProjects[0];
           setActiveProjectId(found.id);
           setActiveProject(found);
-          const qa = UniversalOrchestrator.runQualityGate(found);
-          setQaResult(qa);
         } else {
-          // Initialize with default official template projects
-          const defaultLanding = TEMPLATES[0].createProject('NONONICK Digital Studio');
-          const defaultBoilerplate = TEMPLATES[1].createProject('Apex Nova SaaS');
+          // Initialize with default template projects so user immediately has rich projects to explore
+          const defaultLanding = TEMPLATES[0].createProject('Apex Nova SaaS');
+          const defaultBoilerplate = TEMPLATES[1].createProject('Modern Web Boilerplate');
           const defaultPortfolio = TEMPLATES[2].createProject('Creative Portfolio');
 
           await dbManager.saveProject(defaultLanding);
@@ -126,8 +109,6 @@ export default function App() {
           setProjects(initialList);
           setActiveProjectId(defaultLanding.id);
           setActiveProject(defaultLanding);
-          const qa = UniversalOrchestrator.runQualityGate(defaultLanding);
-          setQaResult(qa);
         }
       } catch (err) {
         console.error('Error loading stored projects:', err);
@@ -146,9 +127,8 @@ export default function App() {
       if (found) {
         setActiveProject(found);
         dbManager.setSetting('last_active_project_id', activeProjectId);
+        // Load version snapshots for this project
         dbManager.getVersions(found.id).then(setVersions);
-        const qa = UniversalOrchestrator.runQualityGate(found);
-        setQaResult(qa);
       }
     }
   }, [activeProjectId, projects]);
@@ -161,6 +141,12 @@ export default function App() {
     const timer = setTimeout(async () => {
       try {
         await dbManager.saveProject(activeProject);
+        if (currentUser && currentUser.uid) {
+          saveProjectToFirestore(activeProject, currentUser.uid).catch((err) => {
+            console.warn('Firestore cloud sync notice:', err);
+          });
+        }
+        // Update in projects list
         setProjects((prev) =>
           prev.map((p) => (p.id === activeProject.id ? activeProject : p))
         );
@@ -172,129 +158,26 @@ export default function App() {
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [activeProject, isLoaded]);
+  }, [activeProject, isLoaded, currentUser]);
 
-  // Record state into Undo Stack before any modification
-  const recordHistory = useCallback(
-    (label: string, projectOverride?: Project) => {
-      const current = projectOverride || activeProject;
-      if (!current) return;
-      const snapshot: HistorySnapshot = {
-        files: JSON.parse(JSON.stringify(current.files)),
-        activeFilePath: current.activeFilePath,
-        label,
-        timestamp: Date.now(),
-      };
-      setUndoStack((prev) => [snapshot, ...prev].slice(0, 50));
-      setRedoStack([]); // Clear redo stack on new action
-    },
-    [activeProject]
-  );
-
-  // Undo Handler (قبل / واگرد)
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0 || !activeProject) return;
-
-    const [targetSnapshot, ...remainingUndo] = undoStack;
-
-    // Push current active state to Redo stack
-    const currentSnapshot: HistorySnapshot = {
-      files: JSON.parse(JSON.stringify(activeProject.files)),
-      activeFilePath: activeProject.activeFilePath,
-      label: targetSnapshot.label,
-      timestamp: Date.now(),
-    };
-
-    setRedoStack((prev) => [currentSnapshot, ...prev].slice(0, 50));
-    setUndoStack(remainingUndo);
-
-    const updatedProj: Project = {
-      ...activeProject,
-      files: JSON.parse(JSON.stringify(targetSnapshot.files)),
-      activeFilePath: targetSnapshot.activeFilePath || activeProject.activeFilePath,
-      updatedAt: Date.now(),
-    };
-
-    setActiveProject(updatedProj);
-    setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
-    dbManager.saveProject(updatedProj);
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
-
-    setHistoryToast({ message: `واگرد (Undo): ${targetSnapshot.label}`, type: 'undo' });
-    setTimeout(() => setHistoryToast(null), 2200);
-  }, [undoStack, activeProject]);
-
-  // Redo Handler (بعد / بازانجام)
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0 || !activeProject) return;
-
-    const [targetSnapshot, ...remainingRedo] = redoStack;
-
-    // Push current active state to Undo stack
-    const currentSnapshot: HistorySnapshot = {
-      files: JSON.parse(JSON.stringify(activeProject.files)),
-      activeFilePath: activeProject.activeFilePath,
-      label: targetSnapshot.label,
-      timestamp: Date.now(),
-    };
-
-    setUndoStack((prev) => [currentSnapshot, ...prev].slice(0, 50));
-    setRedoStack(remainingRedo);
-
-    const updatedProj: Project = {
-      ...activeProject,
-      files: JSON.parse(JSON.stringify(targetSnapshot.files)),
-      activeFilePath: targetSnapshot.activeFilePath || activeProject.activeFilePath,
-      updatedAt: Date.now(),
-    };
-
-    setActiveProject(updatedProj);
-    setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
-    dbManager.saveProject(updatedProj);
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
-
-    setHistoryToast({ message: `بازانجام (Redo): ${targetSnapshot.label}`, type: 'redo' });
-    setTimeout(() => setHistoryToast(null), 2200);
-  }, [redoStack, activeProject]);
-
-  // Global Keyboard Shortcuts (Cmd+K, Cmd+S, Cmd+Z, Cmd+Shift+Z / Cmd+Y)
+  // Global Keyboard Shortcuts (Cmd+K, Cmd+S)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isInput =
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement)?.isContentEditable;
-
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setShowOrchestrator((prev) => !prev);
+        setShowCommandPalette((prev) => !prev);
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (activeProject) {
           dbManager.saveProject(activeProject);
           createSnapshot('Manual Save');
         }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        if (!isInput) {
-          e.preventDefault();
-          handleUndo();
-        }
-      } else if (
-        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') ||
-        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && e.shiftKey)
-      ) {
-        if (!isInput) {
-          e.preventDefault();
-          handleRedo();
-        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeProject, handleUndo, handleRedo]);
+  }, [activeProject]);
 
   // Snapshot Creation Helper
   const createSnapshot = useCallback(
@@ -317,15 +200,12 @@ export default function App() {
   // Restore Snapshot Helper
   const handleRestoreVersion = (version: VersionSnapshot) => {
     if (!activeProject) return;
-    const updated = {
+    setActiveProject({
       ...activeProject,
       files: JSON.parse(JSON.stringify(version.files)),
       updatedAt: Date.now(),
-    };
-    setActiveProject(updated);
+    });
     setShowVersionHistory(false);
-    const qa = UniversalOrchestrator.runQualityGate(updated);
-    setQaResult(qa);
   };
 
   // --- Project CRUD ---
@@ -335,10 +215,7 @@ export default function App() {
     setProjects((prev) => [newProj, ...prev]);
     setActiveProjectId(newProj.id);
     setActiveProject(newProj);
-    setActiveModuleTab('editor');
     dbManager.saveProject(newProj);
-    const qa = UniversalOrchestrator.runQualityGate(newProj);
-    setQaResult(qa);
   };
 
   const handleDeleteProject = async (id: string) => {
@@ -409,9 +286,6 @@ export default function App() {
       setProjects((prev) => [newProj, ...prev]);
       setActiveProjectId(newProj.id);
       setActiveProject(newProj);
-      setActiveModuleTab('editor');
-      const qa = UniversalOrchestrator.runQualityGate(newProj);
-      setQaResult(qa);
     } catch (err) {
       console.error('ZIP import error:', err);
     }
@@ -459,6 +333,7 @@ export default function App() {
       }
     }
 
+    // Merge or replace
     const updated = [...activeProject.files];
     for (const nf of newFiles) {
       const idx = updated.findIndex((x) => x.path === nf.path);
@@ -466,40 +341,25 @@ export default function App() {
       else updated.push(nf);
     }
 
-    const updatedProj = { ...activeProject, files: updated, updatedAt: Date.now() };
-    setActiveProject(updatedProj);
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
+    setActiveProject({
+      ...activeProject,
+      files: updated,
+      updatedAt: Date.now(),
+    });
   };
 
   // --- Project File Modifications ---
   const handleUpdateActiveFileContent = (newContent: string) => {
     if (!activeProject) return;
-
-    if (!isTypingSessionRef.current) {
-      recordHistory(`ویرایش فایل ${activeProject.activeFilePath}`);
-      isTypingSessionRef.current = true;
-    }
-
-    if (fileContentDebounceTimerRef.current) {
-      clearTimeout(fileContentDebounceTimerRef.current);
-    }
-    fileContentDebounceTimerRef.current = setTimeout(() => {
-      isTypingSessionRef.current = false;
-    }, 1200);
-
     const path = activeProject.activeFilePath;
     const updatedFiles = activeProject.files.map((f) =>
       f.path === path ? { ...f, content: newContent, size: newContent.length, updatedAt: Date.now() } : f
     );
-    const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
-    setActiveProject(updatedProj);
+    setActiveProject({ ...activeProject, files: updatedFiles, updatedAt: Date.now() });
   };
 
   const handleCreateFile = (path: string, initialContent = '') => {
     if (!activeProject) return;
-    recordHistory(`ایجاد فایل ${path}`);
-
     const cleanPath = path.startsWith('/') ? path : '/' + path;
     const name = cleanPath.split('/').pop() || 'file';
     const { type, extension, mimeType, isBinary } = detectFileType(cleanPath);
@@ -516,38 +376,32 @@ export default function App() {
       updatedAt: Date.now(),
     };
 
-    const updatedProj = {
+    setActiveProject({
       ...activeProject,
       files: [...activeProject.files, newFile],
       activeFilePath: cleanPath,
       updatedAt: Date.now(),
-    };
-    setActiveProject(updatedProj);
+    });
   };
 
   const handleDeleteFile = (path: string) => {
     if (!activeProject) return;
-    recordHistory(`حذف فایل ${path}`);
-
     const remaining = activeProject.files.filter((f) => f.path !== path);
     const nextActive =
       activeProject.activeFilePath === path
         ? remaining[0]?.path || ''
         : activeProject.activeFilePath;
 
-    const updatedProj = {
+    setActiveProject({
       ...activeProject,
       files: remaining,
       activeFilePath: nextActive,
       updatedAt: Date.now(),
-    };
-    setActiveProject(updatedProj);
+    });
   };
 
   const handleRenameFile = (oldPath: string, newPath: string) => {
     if (!activeProject) return;
-    recordHistory(`تغییر نام ${oldPath}`);
-
     const updatedFiles = activeProject.files.map((f) => {
       if (f.path === oldPath) {
         const cleanNew = newPath.startsWith('/') ? newPath : '/' + newPath;
@@ -566,19 +420,16 @@ export default function App() {
       return f;
     });
 
-    const updatedProj = {
+    setActiveProject({
       ...activeProject,
       files: updatedFiles,
       activeFilePath: activeProject.activeFilePath === oldPath ? newPath : activeProject.activeFilePath,
       updatedAt: Date.now(),
-    };
-    setActiveProject(updatedProj);
+    });
   };
 
   const handleDuplicateFile = (path: string) => {
     if (!activeProject) return;
-    recordHistory(`تکثیر فایل ${path}`);
-
     const target = activeProject.files.find((f) => f.path === path);
     if (!target) return;
 
@@ -594,19 +445,18 @@ export default function App() {
       updatedAt: Date.now(),
     };
 
-    const updatedProj = {
+    setActiveProject({
       ...activeProject,
       files: [...activeProject.files, dupFile],
       updatedAt: Date.now(),
-    };
-    setActiveProject(updatedProj);
+    });
   };
 
   // --- Visual Style & Element Modifications ---
   const handleApplyStyleToSelectedElement = (property: string, value: string) => {
     if (!selectedElement || !activeProject) return;
-    recordHistory(`تغییر استایل ${property}`);
 
+    // Send postMessage to preview iframe for immediate live visual feedback
     const iframe = document.querySelector('iframe') as HTMLIFrameElement;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
@@ -622,8 +472,10 @@ export default function App() {
       );
     }
 
+    // Update style in Project CSS or inline HTML style attribute
     const cssFile = activeProject.files.find((f) => f.type === 'css') || activeProject.files.find((f) => f.path === '/style.css');
 
+    // Also update selectedElement state
     setSelectedElement((prev) =>
       prev
         ? {
@@ -633,6 +485,7 @@ export default function App() {
         : null
     );
 
+    // Append / update rule in project CSS file
     if (cssFile) {
       const kebabProp = property.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
       const cssRule = `\n/* Visual Inspector override for ${selectedElement.selectorPath} */\n${selectedElement.selectorPath} {\n  ${kebabProp}: ${value} !important;\n}\n`;
@@ -651,7 +504,6 @@ export default function App() {
 
   const handleUpdateElementText = (newText: string) => {
     if (!selectedElement || !activeProject) return;
-    recordHistory('ویرایش متن المان');
 
     const iframe = document.querySelector('iframe') as HTMLIFrameElement;
     if (iframe && iframe.contentWindow) {
@@ -667,6 +519,7 @@ export default function App() {
       );
     }
 
+    // Replace text in HTML file
     const htmlFile = activeProject.files.find((f) => f.path === '/index.html' || f.extension === 'html');
     if (htmlFile && selectedElement.innerText) {
       const updatedContent = htmlFile.content.replace(selectedElement.innerText, newText);
@@ -683,11 +536,158 @@ export default function App() {
     setSelectedElement((prev) => (prev ? { ...prev, innerText: newText } : null));
   };
 
+  const handleExtractElementToComponent = () => {
+    if (!selectedElement || !activeProject) return;
+
+    // 1. Determine clean component name
+    let baseName = selectedElement.tagName.toLowerCase();
+    if (selectedElement.id) {
+      baseName = selectedElement.id.replace(/[^a-zA-Z0-9_-]/g, '');
+    } else if (selectedElement.className) {
+      const firstClass = selectedElement.className.trim().split(/\s+/)[0];
+      if (firstClass && !firstClass.includes(':') && !firstClass.includes('/')) {
+        baseName = firstClass.replace(/[^a-zA-Z0-9_-]/g, '');
+      }
+    }
+
+    // Convert to PascalCase/kebab-case clean name
+    const cleanPascal = baseName
+      .split(/[-_]/)
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join('');
+    const componentName = cleanPascal || 'Component';
+
+    // Ensure unique partial filename in components/ directory (e.g. /components/NonoCard.html or _nono-card.html)
+    let compPath = `/components/_${baseName}.html`;
+    let counter = 1;
+    while (activeProject.files.some((f) => f.path === compPath)) {
+      compPath = `/components/_${baseName}_${counter}.html`;
+      counter++;
+    }
+
+    // 2. Extract HTML structure
+    const rawHtml =
+      selectedElement.outerHTML ||
+      `<${selectedElement.tagName.toLowerCase()} class="${selectedElement.className || ''}">${
+        selectedElement.innerText || ''
+      }</${selectedElement.tagName.toLowerCase()}>`;
+
+    // 3. Extract associated styles
+    const relevantStyles = Object.entries(selectedElement.styles || {}).filter(
+      ([_, v]) => v && v !== 'none' && v !== 'normal' && v !== 'auto' && v !== 'rgba(0, 0, 0, 0)'
+    );
+
+    let compContent = `<!-- ======================================================== -->\n`;
+    compContent += `<!-- Component: ${componentName} -->\n`;
+    compContent += `<!-- Extracted from: ${selectedElement.selectorPath} -->\n`;
+    compContent += `<!-- Date: ${new Date().toISOString()} -->\n`;
+    compContent += `<!-- ======================================================== -->\n\n`;
+
+    if (relevantStyles.length > 0) {
+      compContent += `<style>\n  /* Component Scoped Styles */\n  .${baseName}-extracted {\n`;
+      for (const [prop, val] of relevantStyles) {
+        const kebab = prop.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+        compContent += `    ${kebab}: ${val};\n`;
+      }
+      compContent += `  }\n</style>\n\n`;
+    }
+
+    compContent += `${rawHtml.trim()}\n`;
+
+    // 4. Create new partial file in project
+    const newComponentFile: ProjectFile = {
+      path: compPath,
+      name: compPath.split('/').pop() || 'component.html',
+      extension: 'html',
+      type: 'html',
+      content: compContent,
+      isBinary: false,
+      mimeType: 'text/html',
+      size: compContent.length,
+      updatedAt: Date.now(),
+    };
+
+    // 5. Replace original element in the HTML document with a comment placeholder
+    const placeholderComment = `<!-- [COMPONENT: ${componentName} -> Extracted to ${compPath}] -->`;
+    const targetHtmlFile =
+      activeProject.files.find((f) => f.path === activeProject.activeFilePath && f.extension === 'html') ||
+      activeProject.files.find((f) => f.path === '/index.html') ||
+      activeProject.files.find((f) => f.extension === 'html');
+
+    let updatedFiles = [...activeProject.files, newComponentFile];
+
+    if (targetHtmlFile) {
+      let updatedHtml = targetHtmlFile.content;
+      let replaced = false;
+
+      // Try replacing full outerHTML if present
+      if (selectedElement.outerHTML && updatedHtml.includes(selectedElement.outerHTML)) {
+        updatedHtml = updatedHtml.replace(selectedElement.outerHTML, placeholderComment);
+        replaced = true;
+      }
+
+      // Fallback matching by innerText if unique
+      if (!replaced && selectedElement.innerText && selectedElement.innerText.trim().length > 3) {
+        const needle = selectedElement.innerText.trim();
+        const tagRegex = new RegExp(`<${selectedElement.tagName}[^>]*>[\\s\\S]*?${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?<\\/${selectedElement.tagName}>`, 'i');
+        if (tagRegex.test(updatedHtml)) {
+          updatedHtml = updatedHtml.replace(tagRegex, placeholderComment);
+          replaced = true;
+        }
+      }
+
+      // Fallback matching by id
+      if (!replaced && selectedElement.id) {
+        const idRegex = new RegExp(`<${selectedElement.tagName}[^>]*id=["']${selectedElement.id}["'][^>]*>[\\s\\S]*?<\\/${selectedElement.tagName}>`, 'i');
+        if (idRegex.test(updatedHtml)) {
+          updatedHtml = updatedHtml.replace(idRegex, placeholderComment);
+          replaced = true;
+        }
+      }
+
+      // If matched and replaced in file
+      if (replaced) {
+        updatedFiles = updatedFiles.map((f) =>
+          f.path === targetHtmlFile.path
+            ? { ...f, content: updatedHtml, size: updatedHtml.length, updatedAt: Date.now() }
+            : f
+        );
+      }
+    }
+
+    // 6. Notify preview iframe to live replace DOM node with comment
+    const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(
+        {
+          type: 'NONONICK_REPLACE_ELEMENT_WITH_COMMENT',
+          payload: {
+            selector: selectedElement.selectorPath,
+            commentText: `[COMPONENT: ${componentName} -> Extracted to ${compPath}]`,
+          },
+        },
+        '*'
+      );
+    }
+
+    // 7. Update active project and select the newly extracted file in explorer
+    setActiveProject({
+      ...activeProject,
+      files: updatedFiles,
+      activeFilePath: compPath,
+      updatedAt: Date.now(),
+    });
+
+    // 8. Snapshot and deselect element
+    createSnapshot(`Extracted element <${selectedElement.tagName.toLowerCase()}> to ${compPath}`);
+    setSelectedElement(null);
+  };
+
   // --- AI Approval Workflow ---
   const handleAcceptAIProposal = (acceptedChanges: AIProposedChange[]) => {
     if (!activeProject || acceptedChanges.length === 0) return;
-    recordHistory('اعمال پیشنهاد هوش مصنوعی');
 
+    // First create a safety rollback snapshot
     createSnapshot('Before AI: ' + (activeProposal?.title || 'AI Update'));
 
     let updatedFiles = [...activeProject.files];
@@ -719,19 +719,16 @@ export default function App() {
       }
     }
 
-    const updatedProj = {
+    setActiveProject({
       ...activeProject,
       files: updatedFiles,
       updatedAt: Date.now(),
-    };
+    });
 
-    setActiveProject(updatedProj);
     setActiveProposal(null);
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
   };
 
-  // --- Database, SEO, and Telemetry Handlers ---
+  // --- Database & SEO Handlers ---
   const handleUpdateProjectDatabase = (newCollections: DatabaseCollection[]) => {
     if (!activeProject) return;
     const updated: Project = {
@@ -758,8 +755,6 @@ export default function App() {
     setActiveProject(updated);
     setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     dbManager.saveProject(updated);
-    const qa = UniversalOrchestrator.runQualityGate(updated);
-    setQaResult(qa);
   };
 
   const handleInjectAnalyticsTracker = () => {
@@ -785,11 +780,8 @@ export default function App() {
         : f
     );
 
-    const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
-    setActiveProject(updatedProj);
+    setActiveProject({ ...activeProject, files: updatedFiles, updatedAt: Date.now() });
     createSnapshot('Injected Analytics Telemetry Tracker');
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
   };
 
   const handleApplyAnalyticsCodePatch = (filePath: string, patch: string, description: string) => {
@@ -825,45 +817,47 @@ export default function App() {
     setActiveProposal(proposal);
   };
 
-  // --- Website Analyzer Heuristic Auto-Fixer ---
+  // --- Website Analyzer & Code Auto-Fix Handlers ---
   const handleApplyAnalyzerFix = (issue: AnalyzerIssue) => {
-    if (!activeProject || !issue.suggestedPatch) return;
-    createSnapshot(`Before Fix: ${issue.title}`);
+    if (!activeProject) return;
+    if (issue.suggestedPatch) {
+      const targetPath = issue.affectedFile || '/index.html';
+      const targetFile = activeProject.files.find((f) => f.path === targetPath) || activeProject.files.find((f) => f.extension === 'html');
+      if (targetFile) {
+        let newContent = targetFile.content;
+        if (newContent.includes(issue.suggestedPatch.findText)) {
+          newContent = newContent.replace(issue.suggestedPatch.findText, issue.suggestedPatch.replaceText);
+        } else if (newContent.includes('</head>')) {
+          newContent = newContent.replace('</head>', `    ${issue.suggestedPatch.replaceText}\n</head>`);
+        } else {
+          newContent = issue.suggestedPatch.replaceText + '\n' + newContent;
+        }
 
-    const targetFile = activeProject.files.find((f) => f.path === issue.affectedFile) || activeProject.files.find((f) => f.extension === 'html');
-    if (!targetFile) return;
-
-    const { findText, replaceText } = issue.suggestedPatch;
-    let content = targetFile.content;
-
-    if (content.includes(findText)) {
-      content = content.replace(findText, replaceText);
-    } else if (findText === '</title>' && !content.includes('</title>')) {
-      content = content.replace('<head>', `<head>\n    ${replaceText}`);
-    } else {
-      content = content.replace('<head>', `<head>\n    ${replaceText}`);
+        const updatedFiles = activeProject.files.map((f) =>
+          f.path === targetFile.path ? { ...f, content: newContent, size: newContent.length, updatedAt: Date.now() } : f
+        );
+        const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
+        setActiveProject(updatedProj);
+        setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+        dbManager.saveProject(updatedProj);
+        createSnapshot(`Analyzer Auto-Fix: ${issue.title}`, issue.suggestedPatch.description);
+      }
     }
-
-    const updatedFiles = activeProject.files.map((f) =>
-      f.path === targetFile.path ? { ...f, content, size: content.length, updatedAt: Date.now() } : f
-    );
-
-    const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
-    setActiveProject(updatedProj);
-    const qa = UniversalOrchestrator.runQualityGate(updatedProj);
-    setQaResult(qa);
   };
 
-  // --- Cinema Asset Attachment & HTML Injection ---
-  const handleAttachMediaAsset = (path: string, content: string, isBinary: boolean, mimeType: string) => {
+  // --- Automation Workflow Execution Handler ---
+  const handleExecuteWorkflow = (workflow: AutomationWorkflow) => {
     if (!activeProject) return;
-    const name = path.split('/').pop() || 'asset.jpg';
-    const cleanPath = path.startsWith('/') ? path : '/' + path;
+    createSnapshot(`Ran Automation: ${workflow.name}`, `Triggered ${workflow.trigger.name}`);
+  };
 
-    const assetFile: ProjectFile = {
-      path: cleanPath,
-      name,
-      extension: name.split('.').pop() || 'jpg',
+  // --- Cinema & Creative Asset Handlers ---
+  const handleAttachCinemaMedia = (path: string, content: string, isBinary: boolean, mimeType: string) => {
+    if (!activeProject) return;
+    const newFile: ProjectFile = {
+      path,
+      name: path.split('/').pop() || 'media.jpg',
+      extension: path.split('.').pop() || 'jpg',
       type: 'image',
       content,
       isBinary,
@@ -871,43 +865,35 @@ export default function App() {
       size: content.length,
       updatedAt: Date.now(),
     };
-
-    const existingIdx = activeProject.files.findIndex((f) => f.path === cleanPath);
-    let updatedFiles = [...activeProject.files];
-    if (existingIdx >= 0) {
-      updatedFiles[existingIdx] = assetFile;
-    } else {
-      updatedFiles.push(assetFile);
-    }
-
+    const updatedFiles = [...activeProject.files.filter((f) => f.path !== path), newFile];
     const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
     setActiveProject(updatedProj);
-    createSnapshot(`Attached Media: ${name}`);
+    setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+    dbManager.saveProject(updatedProj);
+    createSnapshot(`Added Cinema Asset: ${newFile.name}`);
   };
 
-  const handleInsertHtmlSnippet = (snippet: string) => {
+  const handleInsertCinemaSnippet = (snippet: string) => {
     if (!activeProject) return;
-    recordHistory('درج کد HTML');
-
-    const indexFile = activeProject.files.find((f) => f.path === '/index.html') || activeProject.files.find((f) => f.extension === 'html');
-    if (!indexFile) return;
-
-    let content = indexFile.content;
-    if (content.includes('</main>')) {
-      content = content.replace('</main>', `    ${snippet}\n</main>`);
-    } else if (content.includes('</body>')) {
-      content = content.replace('</body>', `    ${snippet}\n</body>`);
-    } else {
-      content += `\n${snippet}`;
+    const targetFile = activeProject.files.find((f) => f.path === '/index.html') || activeProject.files.find((f) => f.extension === 'html');
+    if (targetFile) {
+      let updatedContent = targetFile.content;
+      if (updatedContent.includes('</main>')) {
+        updatedContent = updatedContent.replace('</main>', `\n${snippet}\n    </main>`);
+      } else if (updatedContent.includes('</body>')) {
+        updatedContent = updatedContent.replace('</body>', `\n${snippet}\n</body>`);
+      } else {
+        updatedContent += `\n${snippet}`;
+      }
+      const updatedFiles = activeProject.files.map((f) =>
+        f.path === targetFile.path ? { ...f, content: updatedContent, size: updatedContent.length, updatedAt: Date.now() } : f
+      );
+      const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
+      setActiveProject(updatedProj);
+      setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+      dbManager.saveProject(updatedProj);
+      createSnapshot('Injected Cinema Section');
     }
-
-    const updatedFiles = activeProject.files.map((f) =>
-      f.path === indexFile.path ? { ...f, content, size: content.length, updatedAt: Date.now() } : f
-    );
-
-    const updatedProj = { ...activeProject, files: updatedFiles, updatedAt: Date.now() };
-    setActiveProject(updatedProj);
-    createSnapshot('Injected Cinema HTML Scene');
   };
 
   // Current active file object
@@ -917,15 +903,12 @@ export default function App() {
     null;
 
   // View: If no project is active, display Dashboard
-  if (!activeProject || activeModuleTab === 'home') {
+  if (!activeProject) {
     return (
       <>
         <Dashboard
           projects={projects}
-          onOpenProject={(id) => {
-            setActiveProjectId(id);
-            setActiveModuleTab('editor');
-          }}
+          onOpenProject={(id) => setActiveProjectId(id)}
           onCreateProjectFromTemplate={handleCreateProjectFromTemplate}
           onDeleteProject={handleDeleteProject}
           onDuplicateProject={handleDuplicateProject}
@@ -935,11 +918,18 @@ export default function App() {
             setShareTargetProject(proj || null);
             setShowShareModal(true);
           }}
+          onOpenAuth={() => setShowAuthModal(true)}
+          currentUser={currentUser}
         />
         <ShareModal
           isOpen={showShareModal}
           onClose={() => setShowShareModal(false)}
           project={shareTargetProject}
+        />
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          currentUser={currentUser}
         />
       </>
     );
@@ -947,278 +937,187 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-[#06080d] text-slate-100 flex flex-col font-sans overflow-hidden select-none">
-      {/* Master Top Operating System Navigation Bar */}
+      {/* Top Application Header */}
       <EditorHeader
         project={activeProject}
-        activeModuleTab={activeModuleTab}
-        onSelectModuleTab={setActiveModuleTab}
-        onBackToDashboard={() => setActiveModuleTab('home')}
-        onOpenCommandPalette={() => setShowOrchestrator(true)}
+        onBackToDashboard={() => setActiveProjectId(null)}
+        onOpenCommandPalette={() => setShowCommandPalette(true)}
         onOpenVersionHistory={() => setShowVersionHistory(true)}
-        onOpenAssets={() => setActiveModuleTab('assets')}
+        onOpenAssets={() => setShowAssets(true)}
         onOpenAIAssistant={() => setShowAIAssistant(true)}
-        onOpenDatabase={() => setActiveModuleTab('database')}
-        onOpenSEO={() => setActiveModuleTab('seo')}
-        onOpenAnalytics={() => setActiveModuleTab('analytics')}
-        onOpenOrchestrator={() => setShowOrchestrator(true)}
-        onOpenQualityGate={() => setShowQualityGate(true)}
-        onOpenDeliveryContract={() => {
-          if (!activeDeliveryContract && activeProject) {
-            const qa = qaResult || UniversalOrchestrator.runQualityGate(activeProject);
-            const task = UniversalOrchestrator.planTask('Release delivery review', activeProject, 'ship');
-            const contract = UniversalOrchestrator.buildDeliveryContract(activeProject, task, qa);
-            setActiveDeliveryContract(contract);
-          }
-          setShowDeliveryModal(true);
-        }}
+        onOpenDatabase={() => setShowDatabaseStudio(true)}
+        onOpenSEO={() => setShowSeoStudio(true)}
+        onOpenAnalytics={() => setShowAnalyticsStudio(true)}
+        onOpenAutomations={() => setShowAutomationStudio(true)}
+        onOpenAnalyze={() => setShowAnalyzerStudio(true)}
+        onOpenCinema={() => setShowCinemaStudio(true)}
         onOpenShare={() => {
           setShareTargetProject(activeProject);
           setShowShareModal(true);
         }}
+        onOpenAuth={() => setShowAuthModal(true)}
+        currentUser={currentUser}
         layoutMode={layoutMode}
         onChangeLayoutMode={setLayoutMode}
         isSaving={isSaving}
         onRenameProject={handleRenameProject}
-        canUndo={undoStack.length > 0}
-        canRedo={redoStack.length > 0}
-        undoCount={undoStack.length}
-        redoCount={redoStack.length}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
       />
 
-      {/* Main OS Viewport Canvas */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* TAB 1: UNIVERSAL LIVE EDITOR (HTML, CSS, JS, Visual Inspector, Live Preview) */}
-        {activeModuleTab === 'editor' && (
-          <div className="flex-1 flex overflow-hidden p-2 gap-2 relative">
-            {/* Desktop Layout (>= 768px) */}
-            <div className="hidden md:flex flex-1 gap-2 overflow-hidden">
-              {/* File Explorer */}
-              <div className="w-60 shrink-0 h-full">
-                <FileManager
-                  files={activeProject.files}
-                  activeFilePath={activeProject.activeFilePath}
-                  onSelectFile={(path) => setActiveProject({ ...activeProject, activeFilePath: path })}
-                  onCreateFile={handleCreateFile}
-                  onCreateFolder={(folder) => handleCreateFile(folder + '/.keep', '')}
-                  onDeleteFile={handleDeleteFile}
-                  onRenameFile={handleRenameFile}
-                  onDuplicateFile={handleDuplicateFile}
-                  onUploadFiles={handleUploadFilesToCurrentProject}
-                  onUploadZip={handleImportZip}
-                  onExportZip={() => exportProjectAsZip(activeProject)}
-                />
-              </div>
+      {/* Main Workspace Workspace Layout */}
+      <div className="flex-1 flex overflow-hidden p-2 gap-2 relative">
+        {/* DESKTOP WORKSPACE (>= 768px) */}
+        <div className="hidden md:flex flex-1 gap-2 overflow-hidden">
+          {/* Left Column: File Explorer (Collapsible or 240px) */}
+          <div className="w-60 shrink-0 h-full">
+            <FileManager
+              files={activeProject.files}
+              activeFilePath={activeProject.activeFilePath}
+              onSelectFile={(path) => setActiveProject({ ...activeProject, activeFilePath: path })}
+              onCreateFile={handleCreateFile}
+              onCreateFolder={(folder) => handleCreateFile(folder + '/.keep', '')}
+              onDeleteFile={handleDeleteFile}
+              onRenameFile={handleRenameFile}
+              onDuplicateFile={handleDuplicateFile}
+              onUploadFiles={handleUploadFilesToCurrentProject}
+              onUploadZip={handleImportZip}
+              onExportZip={() => exportProjectAsZip(activeProject)}
+            />
+          </div>
 
-              {/* Code Editor */}
-              {(layoutMode === 'split' || layoutMode === 'code') && (
-                <div className={`h-full ${layoutMode === 'split' ? 'w-1/2 flex-1' : 'flex-1'}`}>
-                  <CodeEditor
-                    file={activeFile}
-                    allFiles={activeProject.files}
-                    onChange={handleUpdateActiveFileContent}
-                    onAskAI={(snippet) => setShowAIAssistant(true)}
-                  />
-                </div>
-              )}
-
-              {/* Live Preview */}
-              {(layoutMode === 'split' || layoutMode === 'preview') && (
-                <div className={`h-full ${layoutMode === 'split' ? 'w-1/2 flex-1' : 'flex-1'}`}>
-                  <PreviewEngine
-                    project={activeProject}
-                    isInspectMode={isInspectMode}
-                    onToggleInspect={() => {
-                      setIsInspectMode(!isInspectMode);
-                      if (isInspectMode) setSelectedElement(null);
-                    }}
-                    selectedElement={selectedElement}
-                    onSelectElement={(el) => setSelectedElement(el)}
-                    onUpdateElementInlineText={handleUpdateElementText}
-                  />
-                </div>
-              )}
-
-              {/* Visual Element Inspector */}
-              {selectedElement && (
-                <div className="w-80 shrink-0 h-full animate-in slide-in-from-right-4 duration-200">
-                  <ElementInspector
-                    element={selectedElement}
-                    onClose={() => setSelectedElement(null)}
-                    onApplyStyle={handleApplyStyleToSelectedElement}
-                    onUpdateText={handleUpdateElementText}
-                    onDeleteElement={() => {
-                      if (selectedElement.innerText) handleUpdateElementText('');
-                      setSelectedElement(null);
-                    }}
-                    onDuplicateElement={() => handleApplyStyleToSelectedElement('opacity', '1')}
-                    onMoveElement={() => {}}
-                    onAskAIAboutElement={() => setShowAIAssistant(true)}
-                  />
-                </div>
-              )}
+          {/* Center Column: Code Editor (if in 'split' or 'code' mode) */}
+          {(layoutMode === 'split' || layoutMode === 'code') && (
+            <div className={`h-full ${layoutMode === 'split' ? 'w-1/2 flex-1' : 'flex-1'}`}>
+              <CodeEditor
+                file={activeFile}
+                allFiles={activeProject.files}
+                onChange={handleUpdateActiveFileContent}
+                onAskAI={(snippet) => {
+                  setShowAIAssistant(true);
+                }}
+              />
             </div>
+          )}
 
-            {/* Mobile Layout (< 768px) with Bottom Tab Swapping */}
-            <div className="md:hidden flex-1 flex flex-col overflow-hidden pb-14">
-              {mobileTab === 'files' && (
-                <FileManager
-                  files={activeProject.files}
-                  activeFilePath={activeProject.activeFilePath}
-                  onSelectFile={(path) => {
-                    setActiveProject({ ...activeProject, activeFilePath: path });
-                    setMobileTab('code');
-                  }}
-                  onCreateFile={handleCreateFile}
-                  onCreateFolder={(folder) => handleCreateFile(folder + '/.keep', '')}
-                  onDeleteFile={handleDeleteFile}
-                  onRenameFile={handleRenameFile}
-                  onDuplicateFile={handleDuplicateFile}
-                  onUploadFiles={handleUploadFilesToCurrentProject}
-                  onUploadZip={handleImportZip}
-                  onExportZip={() => exportProjectAsZip(activeProject)}
-                />
-              )}
-
-              {mobileTab === 'code' && (
-                <CodeEditor
-                  file={activeFile}
-                  allFiles={activeProject.files}
-                  onChange={handleUpdateActiveFileContent}
-                  onAskAI={() => setMobileTab('ai')}
-                />
-              )}
-
-              {mobileTab === 'preview' && (
-                <PreviewEngine
-                  project={activeProject}
-                  isInspectMode={isInspectMode}
-                  onToggleInspect={() => {
-                    setIsInspectMode(!isInspectMode);
-                    if (isInspectMode) setSelectedElement(null);
-                  }}
-                  selectedElement={selectedElement}
-                  onSelectElement={(el) => {
-                    setSelectedElement(el);
-                    setMobileTab('inspect');
-                  }}
-                  onUpdateElementInlineText={handleUpdateElementText}
-                />
-              )}
-
-              {mobileTab === 'inspect' && (
-                <ElementInspector
-                  element={selectedElement}
-                  onClose={() => setSelectedElement(null)}
-                  onApplyStyle={handleApplyStyleToSelectedElement}
-                  onUpdateText={handleUpdateElementText}
-                  onDeleteElement={() => setSelectedElement(null)}
-                  onDuplicateElement={() => {}}
-                  onMoveElement={() => {}}
-                  onAskAIAboutElement={() => setMobileTab('ai')}
-                />
-              )}
-
-              {mobileTab === 'ai' && (
-                <AIAssistant
-                  project={activeProject}
-                  selectedElement={selectedElement}
-                  onProposalReady={(proposal) => setActiveProposal(proposal)}
-                  onCreateNewFile={handleCreateFile}
-                />
-              )}
-
-              {mobileTab === 'assets' && (
-                <AssetManager
-                  files={activeProject.files}
-                  onUploadAssets={handleUploadFilesToCurrentProject}
-                  onDeleteAsset={handleDeleteFile}
-                  onReplaceAsset={(path, newContent, newSize) => {
-                    const updated = activeProject.files.map((f) =>
-                      f.path === path ? { ...f, content: newContent, size: newSize, updatedAt: Date.now() } : f
-                    );
-                    setActiveProject({ ...activeProject, files: updated, updatedAt: Date.now() });
-                  }}
-                />
-              )}
+          {/* Right Column: Live Preview & Visual Website Editor (if in 'split' or 'preview' mode) */}
+          {(layoutMode === 'split' || layoutMode === 'preview') && (
+            <div className={`h-full ${layoutMode === 'split' ? 'w-1/2 flex-1' : 'flex-1'}`}>
+              <PreviewEngine
+                project={activeProject}
+                isInspectMode={isInspectMode}
+                onToggleInspect={() => {
+                  setIsInspectMode(!isInspectMode);
+                  if (isInspectMode) setSelectedElement(null);
+                }}
+                selectedElement={selectedElement}
+                onSelectElement={(el) => {
+                  setSelectedElement(el);
+                }}
+                onUpdateElementInlineText={handleUpdateElementText}
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* TAB 2: CINEMA & CREATIVE ENGINE */}
-        {activeModuleTab === 'cinema' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <CinemaStudio
-              project={activeProject}
-              onAttachMediaAsset={handleAttachMediaAsset}
-              onInsertHtmlSnippet={handleInsertHtmlSnippet}
-            />
-          </div>
-        )}
+          {/* Far Right Sidebar: Element Inspector (Active when element is selected) */}
+          {selectedElement && (
+            <div className="w-80 shrink-0 h-full animate-in slide-in-from-right-4 duration-200">
+              <ElementInspector
+                element={selectedElement}
+                onClose={() => setSelectedElement(null)}
+                onApplyStyle={handleApplyStyleToSelectedElement}
+                onUpdateText={handleUpdateElementText}
+                onDeleteElement={() => {
+                  // Basic element deletion
+                  if (selectedElement.innerText) {
+                    handleUpdateElementText('');
+                  }
+                  setSelectedElement(null);
+                }}
+                onDuplicateElement={() => {
+                  handleApplyStyleToSelectedElement('opacity', '1');
+                }}
+                onMoveElement={(dir) => {
+                  console.log('Move element', dir);
+                }}
+                onAskAIAboutElement={(instruction) => {
+                  setShowAIAssistant(true);
+                }}
+                onExtractComponent={handleExtractElementToComponent}
+              />
+            </div>
+          )}
+        </div>
 
-        {/* TAB 3: WEBSITE ANALYZER STUDIO (8 Categories & 1-Click Fix) */}
-        {activeModuleTab === 'analyze' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <WebsiteAnalyzerStudio
-              project={activeProject}
-              onApplyFix={handleApplyAnalyzerFix}
-            />
-          </div>
-        )}
-
-        {/* TAB 4: SEO AUTOMATION SUITE */}
-        {activeModuleTab === 'seo' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <SeoStudio
-              project={activeProject}
-              isOpen={true}
-              onClose={() => setActiveModuleTab('editor')}
-              onUpdateProjectSeo={handleUpdateProjectSeo}
-            />
-          </div>
-        )}
-
-        {/* TAB 5: AUTOMATION WORKFLOWS ENGINE */}
-        {activeModuleTab === 'automations' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <AutomationStudio
-              project={activeProject}
-              onExecuteWorkflow={(flow) => {
-                createSnapshot(`Workflow Trigger: ${flow.name}`);
+        {/* MOBILE WORKSPACE (< 768px) with Bottom Tab Swapping */}
+        <div className="md:hidden flex-1 flex flex-col overflow-hidden pb-14">
+          {mobileTab === 'files' && (
+            <FileManager
+              files={activeProject.files}
+              activeFilePath={activeProject.activeFilePath}
+              onSelectFile={(path) => {
+                setActiveProject({ ...activeProject, activeFilePath: path });
+                setMobileTab('code');
               }}
+              onCreateFile={handleCreateFile}
+              onCreateFolder={(folder) => handleCreateFile(folder + '/.keep', '')}
+              onDeleteFile={handleDeleteFile}
+              onRenameFile={handleRenameFile}
+              onDuplicateFile={handleDuplicateFile}
+              onUploadFiles={handleUploadFilesToCurrentProject}
+              onUploadZip={handleImportZip}
+              onExportZip={() => exportProjectAsZip(activeProject)}
             />
-          </div>
-        )}
+          )}
 
-        {/* TAB 6: REAL-TIME ANALYTICS & TELEMETRY */}
-        {activeModuleTab === 'analytics' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <AnalyticsStudio
+          {mobileTab === 'code' && (
+            <CodeEditor
+              file={activeFile}
+              allFiles={activeProject.files}
+              onChange={handleUpdateActiveFileContent}
+              onAskAI={() => setMobileTab('ai')}
+            />
+          )}
+
+          {mobileTab === 'preview' && (
+            <PreviewEngine
               project={activeProject}
-              isOpen={true}
-              onClose={() => setActiveModuleTab('editor')}
-              onInjectTrackerToProject={handleInjectAnalyticsTracker}
-              onApplyCodePatch={handleApplyAnalyticsCodePatch}
+              isInspectMode={isInspectMode}
+              onToggleInspect={() => {
+                setIsInspectMode(!isInspectMode);
+                if (isInspectMode) setSelectedElement(null);
+              }}
+              selectedElement={selectedElement}
+              onSelectElement={(el) => {
+                setSelectedElement(el);
+                setMobileTab('inspect');
+              }}
+              onUpdateElementInlineText={handleUpdateElementText}
             />
-          </div>
-        )}
+          )}
 
-        {/* TAB 7: EMBEDDED DATABASE STUDIO */}
-        {activeModuleTab === 'database' && (
-          <div className="flex-1 h-full overflow-hidden">
-            <DatabaseStudio
+          {mobileTab === 'inspect' && (
+            <ElementInspector
+              element={selectedElement}
+              onClose={() => setSelectedElement(null)}
+              onApplyStyle={handleApplyStyleToSelectedElement}
+              onUpdateText={handleUpdateElementText}
+              onDeleteElement={() => setSelectedElement(null)}
+              onDuplicateElement={() => {}}
+              onMoveElement={() => {}}
+              onAskAIAboutElement={() => setMobileTab('ai')}
+              onExtractComponent={handleExtractElementToComponent}
+            />
+          )}
+
+          {mobileTab === 'ai' && (
+            <AIAssistant
               project={activeProject}
-              isOpen={true}
-              onClose={() => setActiveModuleTab('editor')}
-              onUpdateProjectDatabase={handleUpdateProjectDatabase}
+              selectedElement={selectedElement}
+              onProposalReady={(proposal) => setActiveProposal(proposal)}
+              onCreateNewFile={handleCreateFile}
             />
-          </div>
-        )}
+          )}
 
-        {/* TAB 8: ASSET & FILE SYSTEM MANAGER */}
-        {activeModuleTab === 'assets' && (
-          <div className="flex-1 h-full p-4 overflow-y-auto">
+          {mobileTab === 'assets' && (
             <AssetManager
               files={activeProject.files}
               onUploadAssets={handleUploadFilesToCurrentProject}
@@ -1230,121 +1129,31 @@ export default function App() {
                 setActiveProject({ ...activeProject, files: updated, updatedAt: Date.now() });
               }}
             />
-          </div>
-        )}
-
-        {/* TAB 9: AI HUB & MODEL INTEGRATIONS */}
-        {activeModuleTab === 'ai' && (
-          <div className="flex-1 h-full p-2 md:p-4 max-w-6xl mx-auto overflow-hidden">
-            <AIIntegrationsStudio
-              project={activeProject}
-              selectedElement={selectedElement}
-              onProposalReady={(proposal) => {
-                setActiveProposal(proposal);
-              }}
-              onInsertComponentCode={(code) => {
-                handleInsertHtmlSnippet(code);
-              }}
-              onInsertHtmlSnippet={handleInsertHtmlSnippet}
-              onUpdateProjectDatabase={handleUpdateProjectDatabase}
-              onCreateNewFile={handleCreateFile}
-            />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Mobile Touch Bottom Navigation */}
       <MobileNav
         activeTab={mobileTab}
         onSelectTab={setMobileTab}
-        activeModuleTab={activeModuleTab}
-        onSelectModuleTab={setActiveModuleTab}
         hasSelectedElement={!!selectedElement}
+        onOpenDatabase={() => setShowDatabaseStudio(true)}
+        onOpenSEO={() => setShowSeoStudio(true)}
+        onOpenAnalytics={() => setShowAnalyticsStudio(true)}
+        onOpenAutomations={() => setShowAutomationStudio(true)}
+        onOpenAnalyze={() => setShowAnalyzerStudio(true)}
+        onOpenCinema={() => setShowCinemaStudio(true)}
         onOpenOrchestrator={() => setShowOrchestrator(true)}
-        onOpenDatabase={() => setActiveModuleTab('database')}
-        onOpenSEO={() => setActiveModuleTab('seo')}
-        onOpenAnalytics={() => setActiveModuleTab('analytics')}
         onOpenShare={() => {
           setShareTargetProject(activeProject);
           setShowShareModal(true);
         }}
       />
 
-      {/* Universal Orchestrator HUD Modal (The Brain Connecting All Systems) */}
-      <OrchestratorView
-        isOpen={showOrchestrator}
-        onClose={() => setShowOrchestrator(false)}
-        project={activeProject}
-        onUpdateProject={(updated) => {
-          setActiveProject(updated);
-          dbManager.saveProject(updated);
-          const qa = UniversalOrchestrator.runQualityGate(updated);
-          setQaResult(qa);
-        }}
-        onOpenDeliveryContract={(contract) => {
-          setActiveDeliveryContract(contract);
-          setShowOrchestrator(false);
-          setShowDeliveryModal(true);
-        }}
-      />
-
-      {/* 10-Point Quality Gate Audit Modal */}
-      <QualityGateModal
-        isOpen={showQualityGate}
-        onClose={() => setShowQualityGate(false)}
-        qaResult={qaResult || UniversalOrchestrator.runQualityGate(activeProject)}
-        onRerunQA={() => {
-          if (activeProject) {
-            const qa = UniversalOrchestrator.runQualityGate(activeProject);
-            setQaResult(qa);
-          }
-        }}
-        onProceedToDelivery={() => {
-          setShowQualityGate(false);
-          if (!activeDeliveryContract && activeProject) {
-            const qa = qaResult || UniversalOrchestrator.runQualityGate(activeProject);
-            const task = UniversalOrchestrator.planTask('Release delivery review', activeProject, 'ship');
-            const contract = UniversalOrchestrator.buildDeliveryContract(activeProject, task, qa);
-            setActiveDeliveryContract(contract);
-          }
-          setShowDeliveryModal(true);
-        }}
-      />
-
-      {/* Final Delivery & Package Release Modal */}
-      <FinalDeliveryModal
-        isOpen={showDeliveryModal}
-        onClose={() => setShowDeliveryModal(false)}
-        project={activeProject}
-        contract={activeDeliveryContract}
-      />
-
-      {/* AI Diff Viewer & Approval Modal */}
-      {activeProposal && (
-        <AIDiffViewer
-          proposal={activeProposal}
-          onAccept={handleAcceptAIProposal}
-          onCancel={() => setActiveProposal(null)}
-        />
-      )}
-
-      {/* Version History Modal */}
-      {showVersionHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-lg h-[75vh]">
-            <VersionHistory
-              versions={versions}
-              onRestoreVersion={handleRestoreVersion}
-              onCreateSnapshot={createSnapshot}
-              onClose={() => setShowVersionHistory(false)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Slide-out AIAssistant quick drawer */}
-      {showAIAssistant && activeModuleTab !== 'ai' && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 shadow-2xl p-2 bg-black/85 backdrop-blur-md animate-in slide-in-from-right">
+      {/* Slide-out / Modal Panels for Assets, AI Assistant, Version History */}
+      {showAIAssistant && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 shadow-2xl p-2 bg-black/80 backdrop-blur-md animate-in slide-in-from-right">
           <div className="h-full relative">
             <AIAssistant
               project={activeProject}
@@ -1365,74 +1174,165 @@ export default function App() {
         </div>
       )}
 
+      {showAssets && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-4xl h-[85vh] relative">
+            <AssetManager
+              files={activeProject.files}
+              onUploadAssets={handleUploadFilesToCurrentProject}
+              onDeleteAsset={handleDeleteFile}
+              onReplaceAsset={(path, newContent, newSize) => {
+                const updated = activeProject.files.map((f) =>
+                  f.path === path ? { ...f, content: newContent, size: newSize, updatedAt: Date.now() } : f
+                );
+                setActiveProject({ ...activeProject, files: updated, updatedAt: Date.now() });
+              }}
+            />
+            <button
+              onClick={() => setShowAssets(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white p-1"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showVersionHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-lg h-[75vh]">
+            <VersionHistory
+              versions={versions}
+              onRestoreVersion={handleRestoreVersion}
+              onCreateSnapshot={createSnapshot}
+              onClose={() => setShowVersionHistory(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* AI Diff Viewer & Approval Modal (MANDATORY APPROVAL GATEWAY) */}
+      {activeProposal && (
+        <AIDiffViewer
+          proposal={activeProposal}
+          onAccept={handleAcceptAIProposal}
+          onCancel={() => setActiveProposal(null)}
+        />
+      )}
+
+      {/* Database Studio Modal */}
+      <DatabaseStudio
+        project={activeProject}
+        isOpen={showDatabaseStudio}
+        onClose={() => setShowDatabaseStudio(false)}
+        onUpdateProjectDatabase={handleUpdateProjectDatabase}
+      />
+
+      {/* SEO & Meta Studio Modal */}
+      <SeoStudio
+        project={activeProject}
+        isOpen={showSeoStudio}
+        onClose={() => setShowSeoStudio(false)}
+        onUpdateProjectSeo={handleUpdateProjectSeo}
+      />
+
+      {/* Analytics, Telemetry & Web Vitals Studio Modal */}
+      <AnalyticsStudio
+        project={activeProject}
+        isOpen={showAnalyticsStudio}
+        onClose={() => setShowAnalyticsStudio(false)}
+        onInjectTrackerToProject={handleInjectAnalyticsTracker}
+        onApplyCodePatch={handleApplyAnalyticsCodePatch}
+      />
+
+      {/* Automation Studio Modal */}
+      <AutomationStudio
+        project={activeProject}
+        isOpen={showAutomationStudio}
+        onClose={() => setShowAutomationStudio(false)}
+        onExecuteWorkflow={handleExecuteWorkflow}
+      />
+
+      {/* Website Analyzer & Audit Studio Modal */}
+      <WebsiteAnalyzerStudio
+        project={activeProject}
+        isOpen={showAnalyzerStudio}
+        onClose={() => setShowAnalyzerStudio(false)}
+        onApplyFix={handleApplyAnalyzerFix}
+      />
+
+      {/* Cinema & Creative Asset Engine Modal */}
+      <CinemaStudio
+        project={activeProject}
+        isOpen={showCinemaStudio}
+        onClose={() => setShowCinemaStudio(false)}
+        onAttachMediaAsset={handleAttachCinemaMedia}
+        onInsertHtmlSnippet={handleInsertCinemaSnippet}
+      />
+
+      {/* Universal Orchestrator Modal */}
+      <OrchestratorView
+        project={activeProject}
+        isOpen={showOrchestrator}
+        onClose={() => setShowOrchestrator(false)}
+        onUpdateProject={(updated) => {
+          setActiveProject(updated);
+          setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+          dbManager.saveProject(updated);
+        }}
+        onOpenDeliveryContract={() => {}}
+      />
+
       {/* Global Command Palette (Cmd + K) */}
       <CommandPalette
         isOpen={showCommandPalette}
         onClose={() => setShowCommandPalette(false)}
         files={activeProject.files}
-        onSelectFile={(path) => {
-          setActiveProject({ ...activeProject, activeFilePath: path });
-          setActiveModuleTab('editor');
-        }}
+        onSelectFile={(path) => setActiveProject({ ...activeProject, activeFilePath: path })}
         onAction={(actionKey) => {
           switch (actionKey) {
-            case 'toggle-orchestrator':
-              setShowOrchestrator(true);
-              break;
-            case 'toggle-qa':
-              setShowQualityGate(true);
-              break;
-            case 'toggle-delivery':
-              if (!activeDeliveryContract && activeProject) {
-                const qa = qaResult || UniversalOrchestrator.runQualityGate(activeProject);
-                const task = UniversalOrchestrator.planTask('Release delivery review', activeProject, 'ship');
-                const contract = UniversalOrchestrator.buildDeliveryContract(activeProject, task, qa);
-                setActiveDeliveryContract(contract);
-              }
-              setShowDeliveryModal(true);
-              break;
-            case 'toggle-cinema':
-              setActiveModuleTab('cinema');
-              break;
-            case 'toggle-analyze':
-              setActiveModuleTab('analyze');
-              break;
-            case 'toggle-automations':
-              setActiveModuleTab('automations');
-              break;
-            case 'toggle-database':
-              setActiveModuleTab('database');
-              break;
-            case 'toggle-seo':
-              setActiveModuleTab('seo');
-              break;
-            case 'toggle-analytics':
-              setActiveModuleTab('analytics');
-              break;
-            case 'toggle-assets':
-              setActiveModuleTab('assets');
-              break;
-            case 'toggle-ai':
-              setActiveModuleTab('ai');
-              break;
-            case 'toggle-inspect':
-              setIsInspectMode(!isInspectMode);
-              setActiveModuleTab('editor');
-              break;
-            case 'toggle-history':
-              setShowVersionHistory(true);
-              break;
             case 'toggle-share':
               setShareTargetProject(activeProject);
               setShowShareModal(true);
               break;
+            case 'toggle-database':
+              setShowDatabaseStudio(true);
+              break;
+            case 'toggle-seo':
+              setShowSeoStudio(true);
+              break;
+            case 'toggle-analytics':
+              setShowAnalyticsStudio(true);
+              break;
+            case 'toggle-automations':
+              setShowAutomationStudio(true);
+              break;
+            case 'toggle-analyzer':
+              setShowAnalyzerStudio(true);
+              break;
+            case 'toggle-cinema':
+              setShowCinemaStudio(true);
+              break;
+            case 'toggle-orchestrator':
+              setShowOrchestrator(true);
+              break;
             case 'new-file':
-              handleCreateFile('/new-page.html', '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>New Page</title>\n</head>\n<body>\n</body>\n</html>');
-              setActiveModuleTab('editor');
+              handleCreateFile('/new-file.html', '<!DOCTYPE html>\n<html>\n<body>\n</body>\n</html>');
               break;
             case 'new-folder':
               handleCreateFile('/components/.keep', '');
-              setActiveModuleTab('editor');
+              break;
+            case 'toggle-inspect':
+              setIsInspectMode(!isInspectMode);
+              break;
+            case 'toggle-ai':
+              setShowAIAssistant(true);
+              break;
+            case 'toggle-assets':
+              setShowAssets(true);
+              break;
+            case 'toggle-history':
+              setShowVersionHistory(true);
               break;
             case 'export-zip':
               exportProjectAsZip(activeProject);
@@ -1444,26 +1344,19 @@ export default function App() {
         }}
       />
 
-      {/* Public Share Link Modal */}
+      {/* Public Share & Direct URL Modal */}
       <ShareModal
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
         project={shareTargetProject || activeProject}
       />
 
-      {/* Floating Undo/Redo Feedback Toast */}
-      {historyToast && (
-        <div className="fixed bottom-16 md:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0d121f]/95 border border-cyan-500/40 text-xs font-semibold text-white shadow-2xl backdrop-blur-md">
-            {historyToast.type === 'undo' ? (
-              <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-            ) : (
-              <RotateCw className="w-3.5 h-3.5 text-purple-400" />
-            )}
-            <span>{historyToast.message}</span>
-          </div>
-        </div>
-      )}
+      {/* Firebase Authentication Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

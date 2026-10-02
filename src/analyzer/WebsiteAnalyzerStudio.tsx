@@ -18,6 +18,7 @@ import {
   Sliders,
   Check,
   Zap,
+  X,
 } from 'lucide-react';
 import { Project, ProjectFile } from '../types';
 
@@ -64,8 +65,12 @@ interface WebsiteAnalyzerStudioProps {
 
 export const WebsiteAnalyzerStudio: React.FC<WebsiteAnalyzerStudioProps> = ({
   project,
+  isOpen,
+  onClose,
   onApplyFix,
 }) => {
+  if (isOpen !== undefined && !isOpen) return null;
+
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedPriority, setSelectedPriority] = useState<string>('All');
   const [fixedIssueIds, setFixedIssueIds] = useState<Set<string>>(new Set());
@@ -335,7 +340,7 @@ export const WebsiteAnalyzerStudio: React.FC<WebsiteAnalyzerStudioProps> = ({
     setFixedIssueIds((prev) => new Set(prev).add(issue.id));
   };
 
-  return (
+  const content = (
     <div className="h-full flex flex-col bg-[#07090e] text-slate-100 font-sans overflow-hidden">
       {/* Top Header */}
       <div className="px-6 py-4 border-b border-white/5 bg-[#090c14]/90 flex items-center justify-between">
@@ -371,6 +376,16 @@ export const WebsiteAnalyzerStudio: React.FC<WebsiteAnalyzerStudioProps> = ({
             <RefreshCw className={`w-3.5 h-3.5 ${isAuditing ? 'animate-spin' : ''}`} />
             <span>Re-audit</span>
           </button>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition ml-1"
+              title="Close Website Analyzer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -536,4 +551,16 @@ export const WebsiteAnalyzerStudio: React.FC<WebsiteAnalyzerStudioProps> = ({
       </div>
     </div>
   );
+
+  if (isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="w-full max-w-6xl h-[92vh] flex flex-col bg-[#080a11] border border-cyan-500/20 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 };

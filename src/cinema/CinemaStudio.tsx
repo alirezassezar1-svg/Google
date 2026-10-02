@@ -15,6 +15,7 @@ import {
   FileCode2,
   Layers,
   Wand2,
+  X,
 } from 'lucide-react';
 import { Project, ProjectFile } from '../types';
 import { ImageStudio } from '../ai/ImageStudio';
@@ -22,15 +23,20 @@ import { VideoStudio } from '../ai/VideoStudio';
 
 interface CinemaStudioProps {
   project: Project;
+  isOpen?: boolean;
+  onClose?: () => void;
   onAttachMediaAsset: (path: string, content: string, isBinary: boolean, mimeType: string) => void;
   onInsertHtmlSnippet: (snippet: string) => void;
 }
 
 export const CinemaStudio: React.FC<CinemaStudioProps> = ({
   project,
+  isOpen,
+  onClose,
   onAttachMediaAsset,
   onInsertHtmlSnippet,
 }) => {
+  if (isOpen !== undefined && !isOpen) return null;
   const [activeTab, setActiveTab] = useState<'scene' | 'image' | 'video' | 'library'>('scene');
   const [scenePrompt, setScenePrompt] = useState('');
   const [sceneType, setSceneType] = useState<'hero' | 'gallery' | 'background' | 'feature'>('hero');
@@ -132,7 +138,7 @@ export const CinemaStudio: React.FC<CinemaStudioProps> = ({
     onInsertHtmlSnippet(snippet.trim());
   };
 
-  return (
+  const content = (
     <div className="h-full flex flex-col bg-[#07090e] text-slate-100 font-sans overflow-hidden">
       {/* Top Header */}
       <div className="px-6 py-4 border-b border-white/5 bg-[#090c14]/90 flex items-center justify-between">
@@ -147,40 +153,52 @@ export const CinemaStudio: React.FC<CinemaStudioProps> = ({
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-[#050609] p-1 rounded-xl border border-white/5 text-xs">
-          <button
-            onClick={() => setActiveTab('scene')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              activeTab === 'scene' ? 'bg-purple-500/20 text-purple-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Scene Synthesizer
-          </button>
-          <button
-            onClick={() => setActiveTab('library')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              activeTab === 'library' ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Asset Library
-          </button>
-          <button
-            onClick={() => setActiveTab('image')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              activeTab === 'image' ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Image Studio
-          </button>
-          <button
-            onClick={() => setActiveTab('video')}
-            className={`px-3 py-1.5 rounded-lg transition ${
-              activeTab === 'video' ? 'bg-purple-500/20 text-purple-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Video Studio
-          </button>
+        <div className="flex items-center gap-2">
+          {/* Tab Switcher */}
+          <div className="flex items-center gap-1 bg-[#050609] p-1 rounded-xl border border-white/5 text-xs">
+            <button
+              onClick={() => setActiveTab('scene')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === 'scene' ? 'bg-purple-500/20 text-purple-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Scene Synthesizer
+            </button>
+            <button
+              onClick={() => setActiveTab('library')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === 'library' ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Asset Library
+            </button>
+            <button
+              onClick={() => setActiveTab('image')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === 'image' ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Image Studio
+            </button>
+            <button
+              onClick={() => setActiveTab('video')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                activeTab === 'video' ? 'bg-purple-500/20 text-purple-300 font-semibold shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Video Studio
+            </button>
+          </div>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition ml-1"
+              title="Close Cinema Studio"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -323,4 +341,16 @@ export const CinemaStudio: React.FC<CinemaStudioProps> = ({
       </div>
     </div>
   );
+
+  if (isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="w-full max-w-6xl h-[92vh] flex flex-col bg-[#080a11] border border-cyan-500/20 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 };

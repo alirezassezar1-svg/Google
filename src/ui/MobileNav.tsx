@@ -17,20 +17,23 @@ import {
   RotateCcw,
   RotateCw,
 } from 'lucide-react';
-import { ActiveModuleTab } from './EditorHeader';
+import { ActiveModuleTab } from '../types';
 
-export type EditorMobileTab = 'files' | 'code' | 'preview' | 'inspect' | 'ai' | 'cinema' | 'analyze' | 'automations' | 'assets';
+export type EditorMobileTab = 'files' | 'code' | 'preview' | 'inspect' | 'ai' | 'cinema' | 'analyze' | 'automations' | 'assets' | 'database' | 'seo' | 'analytics';
 
 interface MobileNavProps {
   activeTab: EditorMobileTab;
   onSelectTab: (tab: EditorMobileTab) => void;
-  activeModuleTab: ActiveModuleTab;
-  onSelectModuleTab: (tab: ActiveModuleTab) => void;
+  activeModuleTab?: ActiveModuleTab;
+  onSelectModuleTab?: (tab: ActiveModuleTab) => void;
   hasSelectedElement: boolean;
   onOpenOrchestrator?: () => void;
   onOpenDatabase?: () => void;
   onOpenSEO?: () => void;
   onOpenAnalytics?: () => void;
+  onOpenAutomations?: () => void;
+  onOpenAnalyze?: () => void;
+  onOpenCinema?: () => void;
   onOpenShare?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
@@ -48,6 +51,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   onOpenDatabase,
   onOpenSEO,
   onOpenAnalytics,
+  onOpenAutomations,
+  onOpenAnalyze,
+  onOpenCinema,
   onOpenShare,
 }) => {
   const [showDrawer, setShowDrawer] = useState(false);
@@ -122,10 +128,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <div className="grid grid-cols-4 gap-2 text-xs text-center">
             <button
               onClick={() => {
-                onSelectModuleTab('cinema');
+                if (onOpenCinema) onOpenCinema();
+                else if (onSelectModuleTab) onSelectModuleTab('cinema');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Film className="w-5 h-5 text-purple-400" />
               <span className="text-[10px]">Cinema</span>
@@ -133,10 +140,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
             <button
               onClick={() => {
-                onSelectModuleTab('analyze');
+                if (onOpenAnalyze) onOpenAnalyze();
+                else if (onSelectModuleTab) onSelectModuleTab('analyze');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Activity className="w-5 h-5 text-cyan-400" />
               <span className="text-[10px]">Analyze</span>
@@ -144,10 +152,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
             <button
               onClick={() => {
-                onSelectModuleTab('seo');
+                if (onOpenSEO) onOpenSEO();
+                else if (onSelectModuleTab) onSelectModuleTab('seo');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Globe className="w-5 h-5 text-emerald-400" />
               <span className="text-[10px]">SEO</span>
@@ -155,10 +164,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
             <button
               onClick={() => {
-                onSelectModuleTab('automations');
+                if (onOpenAutomations) onOpenAutomations();
+                else if (onSelectModuleTab) onSelectModuleTab('automations');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Zap className="w-5 h-5 text-amber-400" />
               <span className="text-[10px]">Automate</span>
@@ -166,10 +176,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
             <button
               onClick={() => {
-                onSelectModuleTab('database');
+                if (onOpenDatabase) onOpenDatabase();
+                else if (onSelectModuleTab) onSelectModuleTab('database');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Database className="w-5 h-5 text-cyan-400" />
               <span className="text-[10px]">Database</span>
@@ -177,10 +188,11 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
             <button
               onClick={() => {
-                onSelectModuleTab('analytics');
+                if (onOpenAnalytics) onOpenAnalytics();
+                else if (onSelectModuleTab) onSelectModuleTab('analytics');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <BarChart3 className="w-5 h-5 text-amber-400" />
               <span className="text-[10px]">Analytics</span>
@@ -189,10 +201,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             <button
               onClick={() => {
                 onSelectTab('files');
-                onSelectModuleTab('editor');
+                if (onSelectModuleTab) onSelectModuleTab('editor');
                 setShowDrawer(false);
               }}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center gap-1 text-slate-300 transition hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Folder className="w-5 h-5 text-slate-400" />
               <span className="text-[10px]">Files</span>
@@ -204,7 +216,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                   onOpenShare();
                   setShowDrawer(false);
                 }}
-                className="p-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 flex flex-col items-center gap-1 text-cyan-300"
+                className="p-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 flex flex-col items-center gap-1 text-cyan-300 transition hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <Share2 className="w-5 h-5" />
                 <span className="text-[10px]">Share</span>

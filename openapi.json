@@ -1,0 +1,547 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NONONICK Universal AI Editor & Agent Engine API",
+    "description": "Production-grade RESTful API connecting external AI models, Chatbots, Telegram/Discord bots, and developer automations with the NONONICK Universal Web Studio.",
+    "version": "2.5.0",
+    "contact": {
+      "name": "NONONICK AI Studio Core Team",
+      "email": "alirezassezar.1@gmail.com"
+    },
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://ais-pre-5ilkxtfwf6yibz3jj2ynl3-17774190120.europe-west3.run.app",
+      "description": "Production Cloud Gateway"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "tags": [
+    { "name": "System & Health", "description": "System health and discovery endpoints" },
+    { "name": "Chatbot & LLM Integration", "description": "OpenAI-compatible and universal agent webhook endpoints" },
+    { "name": "Database & Storage", "description": "Persistent project storage and sync endpoints" },
+    { "name": "Mock REST API", "description": "Dynamic CRUD REST API generated for in-editor project databases" },
+    { "name": "AI Studios & Generators", "description": "Specialized generative endpoints for code, SEO, schemas, components, and SVGs" },
+    { "name": "Authentication", "description": "Firebase authentication and session verification" }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["System & Health"],
+        "summary": "Check system health and AI readiness",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Server is operational",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "aiAvailable": { "type": "boolean", "example": true },
+                    "publicUrl": { "type": "string" },
+                    "timestamp": { "type": "string" },
+                    "brand": { "type": "string" }
+                  },
+                  "required": ["status", "aiAvailable", "timestamp"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/completions": {
+      "post": {
+        "tags": ["Chatbot & LLM Integration"],
+        "summary": "OpenAI-compatible Chat Completions",
+        "description": "Drop-in standard endpoint compatible with OpenAI SDKs, LangChain, OpenWebUI, and LibreChat.",
+        "operationId": "createChatCompletion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": { "type": "string", "default": "gemini-3.8-flash" },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+                        "content": { "type": "string" }
+                      },
+                      "required": ["role", "content"]
+                    }
+                  },
+                  "temperature": { "type": "number", "default": 0.7 }
+                },
+                "required": ["messages"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OpenAI chat completion response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request payload" }
+        }
+      }
+    },
+    "/api/agent/prompt": {
+      "post": {
+        "tags": ["Chatbot & LLM Integration"],
+        "summary": "Lightweight universal agent webhook",
+        "operationId": "sendAgentPrompt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": { "type": "string", "example": "Generate responsive navbar" },
+                  "projectId": { "type": "string", "nullable": true }
+                },
+                "required": ["prompt"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent processed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "timestamp": { "type": "string" },
+                    "prompt": { "type": "string" },
+                    "response": { "type": "string" },
+                    "targetProjectId": { "type": "string", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/context": {
+      "get": {
+        "tags": ["Chatbot & LLM Integration"],
+        "summary": "Retrieve studio context and projects overview",
+        "operationId": "getAgentContext",
+        "responses": {
+          "200": {
+            "description": "Active projects summary and environment status"
+          }
+        }
+      }
+    },
+    "/api/db/stats": {
+      "get": {
+        "tags": ["Database & Storage"],
+        "summary": "Retrieve database statistics",
+        "operationId": "getDbStats",
+        "responses": {
+          "200": { "description": "Database metrics" }
+        }
+      }
+    },
+    "/api/db/projects": {
+      "get": {
+        "tags": ["Database & Storage"],
+        "summary": "List all projects in server storage",
+        "operationId": "getProjects",
+        "responses": {
+          "200": { "description": "Array of projects" }
+        }
+      },
+      "post": {
+        "tags": ["Database & Storage"],
+        "summary": "Save or update project in server database",
+        "operationId": "saveProject",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Project"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Project successfully saved" }
+        }
+      }
+    },
+    "/api/db/projects/{id}": {
+      "get": {
+        "tags": ["Database & Storage"],
+        "summary": "Retrieve a single project by ID",
+        "operationId": "getProjectById",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Project found" },
+          "404": { "description": "Project not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Database & Storage"],
+        "summary": "Delete a project by ID",
+        "operationId": "deleteProject",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Project deleted" },
+          "404": { "description": "Project not found" }
+        }
+      }
+    },
+    "/api/db/sync": {
+      "post": {
+        "tags": ["Database & Storage"],
+        "summary": "Two-way synchronization between client IndexedDB and server DB",
+        "operationId": "syncDatabase",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientProjects": { "type": "array", "items": { "$ref": "#/components/schemas/Project" } },
+                  "clientVersions": { "type": "array", "items": { "type": "object" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Sync successful" }
+        }
+      }
+    },
+    "/api/mock/{projectId}/{collection}": {
+      "get": {
+        "tags": ["Mock REST API"],
+        "summary": "Query records in a project's database collection",
+        "operationId": "queryMockCollection",
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "collection", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer" } },
+          { "name": "sort", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "order", "in": "query", "required": false, "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": {
+          "200": { "description": "Array of matching collection records" },
+          "404": { "description": "Project or collection not found" }
+        }
+      },
+      "post": {
+        "tags": ["Mock REST API"],
+        "summary": "Create record in project's database collection",
+        "operationId": "createMockRecord",
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "collection", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Record created" },
+          "404": { "description": "Project or collection not found" }
+        }
+      }
+    },
+    "/api/mock/{projectId}/{collection}/{id}": {
+      "put": {
+        "tags": ["Mock REST API"],
+        "summary": "Update record in project's database collection",
+        "operationId": "updateMockRecord",
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "collection", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": {
+          "200": { "description": "Record updated" },
+          "404": { "description": "Record not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Mock REST API"],
+        "summary": "Delete record in project's database collection",
+        "operationId": "deleteMockRecord",
+        "parameters": [
+          { "name": "projectId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "collection", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Record deleted" },
+          "404": { "description": "Record not found" }
+        }
+      }
+    },
+    "/api/ai/assistant": {
+      "post": {
+        "tags": ["AI Studios & Generators"],
+        "summary": "Execute AI Assistant code updates and smart diffs",
+        "operationId": "runAssistant",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "files": { "type": "array", "items": { "type": "object" } },
+                  "currentFilePath": { "type": "string" },
+                  "selectedElement": { "type": "object", "nullable": true }
+                },
+                "required": ["prompt"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "AI change proposal with structured diffs" }
+        }
+      }
+    },
+    "/api/ai/seo-optimize": {
+      "post": {
+        "tags": ["AI Studios & Generators"],
+        "summary": "Generate complete search engine optimization audit & metadata",
+        "operationId": "seoOptimize",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectName": { "type": "string" },
+                  "currentTitle": { "type": "string" },
+                  "currentDescription": { "type": "string" },
+                  "currentKeywords": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Optimal SEO metadata package" }
+        }
+      }
+    },
+    "/api/ai/code-doctor": {
+      "post": {
+        "tags": ["AI Studios & Generators"],
+        "summary": "Comprehensive syntax, accessibility, and security code repair",
+        "operationId": "codeDoctor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": { "type": "array", "items": { "type": "object" } },
+                  "activeFilePath": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Code diagnosis and auto-repaired content" }
+        }
+      }
+    },
+    "/api/ai/generate-svg": {
+      "post": {
+        "tags": ["AI Studios & Generators"],
+        "summary": "Generate clean SVG vector graphics and badges",
+        "operationId": "generateSvg",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "style": { "type": "string" },
+                  "width": { "type": "integer" },
+                  "height": { "type": "integer" }
+                },
+                "required": ["prompt"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Generated SVG vector string" }
+        }
+      }
+    },
+    "/api/download-app-source-zip": {
+      "get": {
+        "tags": ["System & Health"],
+        "summary": "Download complete application source code as ZIP archive",
+        "operationId": "downloadSourceZip",
+        "responses": {
+          "200": {
+            "description": "Source code ZIP binary stream",
+            "content": {
+              "application/zip": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/verify": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Verify Firebase Authentication ID Token or Session",
+        "operationId": "verifyAuthToken",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idToken": { "type": "string" }
+                },
+                "required": ["idToken"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Token is valid and decoded" },
+          "401": { "description": "Invalid or expired token" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
+      }
+    },
+    "schemas": {
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "templateType": { "type": "string" },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "path": { "type": "string" },
+                "content": { "type": "string" },
+                "type": { "type": "string" },
+                "size": { "type": "integer" }
+              },
+              "required": ["id", "name", "path", "content", "type"]
+            }
+          },
+          "updatedAt": { "type": "number" },
+          "createdAt": { "type": "number" }
+        },
+        "required": ["id", "name", "files"]
+      },
+      "ChatCompletionResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string", "example": "chat.completion" },
+          "created": { "type": "integer" },
+          "model": { "type": "string" },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": { "type": "integer" },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "role": { "type": "string" },
+                    "content": { "type": "string" }
+                  }
+                },
+                "finish_reason": { "type": "string" }
+              }
+            }
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "prompt_tokens": { "type": "integer" },
+              "completion_tokens": { "type": "integer" },
+              "total_tokens": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
