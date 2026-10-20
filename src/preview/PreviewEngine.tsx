@@ -27,6 +27,8 @@ import {
   Sun,
   Moon,
   Grid,
+  ShieldCheck,
+  Shield,
 } from 'lucide-react';
 import { Project, ProjectFile, SelectedElementInfo } from '../types';
 
@@ -70,6 +72,8 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
   const [activeConsoleFilter, setActiveConsoleFilter] = useState<'all' | 'error' | 'warn'>('all');
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [safeModeNoJs, setSafeModeNoJs] = useState(false);
+  const [isolationMode, setIsolationMode] = useState<boolean>(true);
+  const [isolationNotice, setIsolationNotice] = useState<string | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -230,6 +234,66 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
       console.warn = function() { sendLog('warn', arguments); _origWarn.apply(console, arguments); };
       console.error = function() { sendLog('error', arguments); _origError.apply(console, arguments); };
       console.info = function() { sendLog('info', arguments); _origInfo.apply(console, arguments); };
+
+      // --- NONONICK ISOLATION LAYER (ایزولاسیون کامل سندباکس، جاوااسکریپت و استایل) ---
+      const isIsolationActive = ${isolationMode ? 'true' : 'false'};
+      if (isIsolationActive) {
+        // Intercept native blocking dialogs (alert, confirm, prompt) to isolate the browser thread
+        window.alert = function(msg) {
+          sendLog('warn', ['[ISOLATION: ALERT INTERCEPTED]', String(msg)]);
+          try {
+            window.parent.postMessage({
+              type: 'NONONICK_ISOLATION_ALERT',
+              payload: { message: String(msg), type: 'alert' }
+            }, '*');
+          } catch(e) {}
+        };
+        window.confirm = function(msg) {
+          sendLog('warn', ['[ISOLATION: CONFIRM INTERCEPTED]', String(msg)]);
+          return true;
+        };
+        window.prompt = function(msg, def) {
+          sendLog('warn', ['[ISOLATION: PROMPT INTERCEPTED]', String(msg)]);
+          return def || '';
+        };
+
+        // Window & Frame isolation: Prevent break-out from iframe
+        try {
+          Object.defineProperty(window, 'top', { get: function() { return window; }, configurable: false });
+        } catch(e) {}
+
+        window.open = function(url) {
+          sendLog('info', ['[ISOLATION: WINDOW.OPEN BLOCKED/LOGGED]', String(url)]);
+          return null;
+        };
+
+        // Storage Isolation: Namespace-isolated localStorage per project
+        try {
+          const _STORAGE_PREFIX = 'nononick_isolated_' + ${JSON.stringify(project.id)} + '_';
+          const _origGet = Storage.prototype.getItem;
+          const _origSet = Storage.prototype.setItem;
+          const _origRem = Storage.prototype.removeItem;
+          window.localStorage.getItem = function(k) { return _origGet.call(window.localStorage, _STORAGE_PREFIX + k); };
+          window.localStorage.setItem = function(k, v) { return _origSet.call(window.localStorage, _STORAGE_PREFIX + k, v); };
+          window.localStorage.removeItem = function(k) { return _origRem.call(window.localStorage, _STORAGE_PREFIX + k); };
+        } catch(e) {}
+
+        // CSS Stacking Context Isolation
+        const injectIsolationCss = function() {
+          if (!document.getElementById('nononick-css-isolation')) {
+            const style = document.createElement('style');
+            style.id = 'nononick-css-isolation';
+            style.textContent = 'html, body { isolation: isolate; }';
+            if (document.head) document.head.appendChild(style);
+            else if (document.body) document.body.appendChild(style);
+          }
+        };
+        if (document.readyState === 'loading') {
+          window.addEventListener('DOMContentLoaded', injectIsolationCss);
+        } else {
+          injectIsolationCss();
+        }
+      }
 
       // 2. Global Error & Rejection Handler
       window.addEventListener('error', function(e) {
@@ -452,7 +516,7 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
     }
 
     return doc;
-  }, [project.files, project.activeFilePath, isInspectMode, safeModeNoJs]);
+  }, [project.files, project.activeFilePath, isInspectMode, safeModeNoJs, isolationMode]);
 
   // Listen to postMessage from iframe
   useEffect(() => {
@@ -461,6 +525,9 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
 
       if (e.data.type === 'NONONICK_ELEMENT_SELECTED') {
         onSelectElement(e.data.payload);
+      } else if (e.data.type === 'NONONICK_ISOLATION_ALERT') {
+        setIsolationNotice(e.data.payload.message);
+        setTimeout(() => setIsolationNotice(null), 4500);
       } else if (e.data.type === 'NONONICK_CONSOLE_LOG') {
         const logItem: PreviewConsoleLog = {
           id: 'log_' + Math.random().toString(36).substring(2, 9),
@@ -631,6 +698,20 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
             <span className="hidden sm:inline">{isInspectMode ? 'Inspect Active' : 'Inspect'}</span>
           </button>
 
+          {/* Isolation Mode Toggle (ایزولاسیون) */}
+          <button
+            onClick={() => setIsolationMode(!isolationMode)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              isolationMode
+                ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 shadow-sm'
+                : 'bg-white/5 hover:bg-white/10 text-slate-400'
+            }`}
+            title="حالت ایزولاسیون (Isolation Mode): سندباکس ایزوله، مهار اسکریپت‌ها، ایزولاسیون استایل و مسدودسازی هنگ مرورگر"
+          >
+            {isolationMode ? <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" /> : <Shield className="w-3.5 h-3.5 text-slate-400" />}
+            <span className="hidden sm:inline">{isolationMode ? 'ایزولاسیون (فعال)' : 'ایزولاسیون'}</span>
+          </button>
+
           {selectedElement && (
             <div className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[11px] font-mono truncate max-w-[140px]">
               <span>{selectedElement.tagName}</span>
@@ -748,6 +829,23 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
         </div>
       </div>
 
+      {/* Isolation Notice Banner */}
+      {isolationNotice && (
+        <div className="bg-cyan-950/90 border-b border-cyan-500/40 px-3 py-2 text-xs flex items-center justify-between text-cyan-200 z-30 animate-in fade-in">
+          <div className="flex items-center gap-2 truncate">
+            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span className="font-semibold text-cyan-300">ایزولاسیون فعال:</span>
+            <span className="truncate">{isolationNotice}</span>
+          </div>
+          <button
+            onClick={() => setIsolationNotice(null)}
+            className="p-1 text-cyan-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Runtime Error Banner if caught */}
       {runtimeError && (
         <div className="bg-rose-950/80 border-b border-rose-500/30 px-3 py-2 text-xs flex items-center justify-between text-rose-200 z-30">
@@ -813,7 +911,11 @@ export const PreviewEngine: React.FC<PreviewEngineProps> = ({
             key={key}
             title="Live Preview Engine"
             srcDoc={bundledHtml}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+            sandbox={
+              isolationMode
+                ? 'allow-scripts allow-same-origin allow-forms'
+                : 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups'
+            }
             className="w-full h-full border-none bg-white"
           />
         </div>

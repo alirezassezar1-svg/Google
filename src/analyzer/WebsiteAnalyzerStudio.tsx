@@ -237,6 +237,21 @@ export const WebsiteAnalyzerStudio: React.FC<WebsiteAnalyzerStudioProps> = ({
       });
     }
 
+    const hasRawAlert = /alert\s*\(/i.test(content) || jsFiles.some((f) => /alert\s*\(/i.test(f.content));
+    if (hasRawAlert) {
+      issues.push({
+        id: 'iss_isolation_1',
+        category: 'Technical Quality',
+        priority: 'MEDIUM',
+        title: 'Blocking window.alert() in Production (نیاز به ایزولاسیون مودال)',
+        whatIsWrong: 'Synchronous window.alert() calls block the browser UI event thread completely.',
+        whyItMatters: 'Freezes mobile interfaces and degrades user experience compared to non-blocking UI notifications.',
+        howToFixIt: 'Replace alert() with non-blocking toast notifications or modal components.',
+        autoFixAvailable: false,
+        affectedFile: htmlFile?.path || '/index.html',
+      });
+    }
+
     // --- 5. Content & UX ---
     const hasLorem = /lorem ipsum/i.test(content);
     if (hasLorem) {

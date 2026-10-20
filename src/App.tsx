@@ -584,7 +584,9 @@ export default function App() {
     compContent += `<!-- ======================================================== -->\n\n`;
 
     if (relevantStyles.length > 0) {
-      compContent += `<style>\n  /* Component Scoped Styles */\n  .${baseName}-extracted {\n`;
+      compContent += `<style>\n  /* Component Scoped & Isolated Styles (ایزولاسیون استایل) */\n  .${baseName}-extracted {\n`;
+      compContent += `    isolation: isolate;\n`;
+      compContent += `    contain: content;\n`;
       for (const [prop, val] of relevantStyles) {
         const kebab = prop.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
         compContent += `    ${kebab}: ${val};\n`;
